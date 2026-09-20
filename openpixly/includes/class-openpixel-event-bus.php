@@ -4,7 +4,7 @@
  *
  * Integrations (WooCommerce, forms, ...) push *normalized* events here.
  * Each registered provider turns a normalized event into its own payload
- * (oaiq(...) args for OpenAI, fbq(...) for Meta later, ...).
+ * (oaiq(...) args for OpenAI, fbq(...) args for Meta, ...).
  *
  * Normalized event shape:
  *
@@ -22,7 +22,9 @@
  *     'custom_name'  => 'quote_requested',     // for name = custom
  *     'user'         => array( 'email' => ..., 'phone' => ..., ... ), // raw, providers hash
  *     'channel'      => 'browser' | 'server',
- *     'context'      => array( 'ip_address', 'user_agent', 'source_url', 'timestamp_ms', 'oppref', 'obref' ),
+ *     'source'       => 'woocommerce',         // optional; providers with that setting off skip it
+ *     'context'      => array( 'ip_address', 'user_agent', 'source_url', 'timestamp_ms',
+ *                              + each provider's attribution cookies: 'oppref', 'obref', 'fbp', 'fbc' ),
  *   )
  */
 
@@ -192,6 +194,7 @@ class OpenPixel_Event_Bus {
 			'custom_name'  => '',
 			'user'         => array(),
 			'channel'      => 'browser',
+			'source'       => '',
 			'context'      => array(),
 		);
 
@@ -199,6 +202,7 @@ class OpenPixel_Event_Bus {
 		$event['name']     = $name;
 		$event['currency'] = OpenPixel_Money::normalize_currency( $event['currency'] );
 		$event['channel']  = 'server' === $event['channel'] ? 'server' : 'browser';
+		$event['source']   = sanitize_key( $event['source'] );
 
 		if ( null !== $event['value'] && '' === $event['currency'] ) {
 			// amount without currency is invalid for every provider we know.

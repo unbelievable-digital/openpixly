@@ -163,4 +163,33 @@ abstract class OpenPixel_Provider {
 	 * @param array $event Normalized bus event with channel = server.
 	 */
 	public function handle_server_event( array $event ) {}
+
+	/**
+	 * First-party attribution cookies the provider's SDK sets. Integrations
+	 * capture them at checkout and hand them back in the server event's
+	 * `context` under the same key.
+	 *
+	 * @return array context key => cookie name
+	 */
+	public function get_attribution_cookies() {
+		return array();
+	}
+
+	/**
+	 * What the admin "Send test event" button does for this provider, or ''
+	 * when there is nothing to test (no server channel, or it is switched off).
+	 */
+	public function get_server_test_description() {
+		return '';
+	}
+
+	/**
+	 * Send a synthetic server event in the API's test / validate mode.
+	 *
+	 * @param array $event Normalized sample purchase.
+	 * @return string|WP_Error Success message for the admin notice.
+	 */
+	public function send_server_test( array $event ) {
+		return new WP_Error( 'openpixel_no_server_test', __( 'This provider has no server-side test.', 'openpixly' ) );
+	}
 }

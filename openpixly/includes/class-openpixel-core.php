@@ -50,10 +50,10 @@ class OpenPixel_Core {
 	 * ------------------------------------------------------------------ */
 
 	private function register_providers() {
-		$providers = array( new OpenPixel_Provider_OpenAI() );
+		$providers = array( new OpenPixel_Provider_OpenAI(), new OpenPixel_Provider_Meta() );
 
 		/**
-		 * Register additional pixel providers (Meta, Google, TikTok, ...).
+		 * Register additional pixel providers (Google, TikTok, ...).
 		 *
 		 * @param OpenPixel_Provider[] $providers
 		 */
@@ -110,10 +110,22 @@ class OpenPixel_Core {
 
 	public function dispatch_server_event( array $event ) {
 		foreach ( $this->providers as $provider ) {
-			if ( $provider->is_enabled() ) {
+			if ( $provider->is_enabled() && $this->provider_wants( $provider, $event ) ) {
 				$provider->handle_server_event( $event );
 			}
 		}
+	}
+
+	/**
+	 * Events tagged with a `source` (e.g. "woocommerce") only reach providers
+	 * whose setting of that name is on. Providers without such a setting are
+	 * treated as opted in.
+	 */
+	private function provider_wants( OpenPixel_Provider $provider, array $event ) {
+		if ( empty( $event['source'] ) ) {
+			return true;
+		}
+		return false !== $provider->get_setting( $event['source'], true );
 	}
 
 	public function track_registration( $user_id ) {
@@ -306,6 +318,9 @@ class OpenPixel_Core {
 
 		foreach ( $events as $event ) {
 			foreach ( $providers as $provider ) {
+				if ( ! $this->provider_wants( $provider, $event ) ) {
+					continue;
+				}
 				$payload = $provider->to_browser_payload( $event );
 				if ( $payload ) {
 					$payloads[] = $payload;

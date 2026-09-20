@@ -2,8 +2,8 @@
  * Openpixly — front-end runtime.
  *
  * PHP emits provider payloads as { provider: "openai", args: [...], event_id }.
- * Each provider registers a handler; the OpenAI handler simply forwards
- * args to window.oaiq (the official SDK queue). Payloads can arrive:
+ * Each provider registers a handler; the built-in handlers simply forward
+ * args to the official SDK queue (window.oaiq, window.fbq). Payloads can arrive:
  *   - inline in the footer (window.openPixelEvents),
  *   - inside WooCommerce AJAX fragments (#openpixel-pending[data-openpixel-events]).
  */
@@ -69,12 +69,14 @@
 			}
 			// WooCommerce replays cached fragments from sessionStorage on
 			// every page load; don't re-send an event we already sent.
-			if (payload.event_id && seen[payload.event_id]) {
+			// Providers share event ids, so the key is per provider.
+			var key = payload.event_id ? payload.provider + ':' + payload.event_id : '';
+			if (key && seen[key]) {
 				return;
 			}
 			try {
 				handler(payload);
-				remember(payload.event_id);
+				remember(key);
 			} catch (e) {
 				if (window.console && console.error) {
 					console.error('[openpixly]', e);
@@ -85,7 +87,7 @@
 	};
 
 	/* ------------------------------------------------------------------
-	 * OpenAI provider
+	 * Built-in providers: forward args to the SDK queue
 	 * ---------------------------------------------------------------- */
 
 	openPixel.register('openai', function (payload) {
@@ -95,21 +97,45 @@
 		window.oaiq.apply(null, payload.args);
 	});
 
-	openPixel.grantConsent = function () {
-		if (typeof window.oaiq === 'function') {
-			window.oaiq('consent', true);
+	openPixel.register('meta', function (payload) {
+		if (typeof window.fbq !== 'function' || !payload.args) {
+			return;
 		}
+		window.fbq.apply(null, payload.args);
+	});
+
+	var consentSetters = {
+		openai: function (granted) {
+			if (typeof window.oaiq === 'function') {
+				window.oaiq('consent', granted);
+			}
+		},
+		meta: function (granted) {
+			if (typeof window.fbq === 'function') {
+				window.fbq('consent', granted ? 'grant' : 'revoke');
+			}
+		}
+	};
+
+	function setConsent(granted) {
+		Object.keys(consentSetters).forEach(function (id) {
+			consentSetters[id](granted);
+		});
+	}
+
+	openPixel.grantConsent = function () {
+		setConsent(true);
 	};
 
 	openPixel.revokeConsent = function () {
-		if (typeof window.oaiq === 'function') {
-			window.oaiq('consent', false);
-		}
+		setConsent(false);
 	};
 
 	function consentRequired() {
-		var cfg = window.openPixelConfig && window.openPixelConfig.providers && window.openPixelConfig.providers.openai;
-		return !!(cfg && cfg.consentMode === 'require');
+		var providers = (window.openPixelConfig && window.openPixelConfig.providers) || {};
+		return Object.keys(providers).some(function (id) {
+			return providers[id].consentMode === 'require';
+		});
 	}
 
 	// WP Consent API (https://wordpress.org/plugins/wp-consent-api/) integration.

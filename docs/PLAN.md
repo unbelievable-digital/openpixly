@@ -29,7 +29,7 @@ OpenPixel_Event_Bus  ── normalized events (view_item, add_to_cart, begin_che
         │           purchase, registration, page_view) with money in minor units
         │
         ├──► OpenPixel_Provider_OpenAI  → oaiq("measure", ...) in the page + Conversions API
-        ├──► (later) Meta provider  → fbq("track", ...)  + Meta CAPI
+        ├──► OpenPixel_Provider_Meta    → fbq("track", ...)  + Meta Conversions API
         └──► (later) Google provider→ gtag("event", ...)
 ```
 
@@ -86,7 +86,10 @@ Source: https://developers.openai.com/ads/product-feeds + https://developers.ope
 - [ ] `ads_metadata` / `custom_label_0..4` mapping from product tags or attributes for product-set filters.
 - [ ] Feed health: per-row validation report (missing brand/image/GTIN), row count trend, last fetch time by OpenAI (User-Agent log on the feed endpoint).
 
-- [ ] Meta Pixel + CAPI provider, Google Ads / GA4 provider, TikTok — each a single class on the bus.
+- [x] Meta Pixel + Conversions API provider (1.3.0): fbq loader, hashed advanced matching, consent revoke/grant, `eventID` dedup with server `Purchase`, `_fbp`/`_fbc` captured at checkout, test event code.
+- [x] Meta catalog feed (1.3.0): second CSV in the same build pass, `/openpixly-feed/<token>/meta-catalog.csv`, ids = pixel `content_ids`.
+- [ ] Verify Meta on a real store: Events Manager > Test events (browser + server dedup), catalog scheduled-feed fetch, catalog match rate.
+- [ ] Google Ads / GA4 provider, TikTok — each a single class on the bus.
 - [ ] WooCommerce Subscriptions → `subscription_created` / `trial_started` (`plan_enrollment`, `plan_id` = product id).
 - [ ] Lead forms (Contact Form 7, WPForms, Gravity Forms) → `lead_created`.
 - [ ] WP Consent API / common CMP integrations for consent mode.

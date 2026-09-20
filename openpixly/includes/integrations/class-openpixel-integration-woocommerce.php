@@ -9,8 +9,9 @@
  *   purchase        – order-received page (browser) + payment complete (server)
  *   sign_up         – handled by core via user_register
  *
- * Also captures the OpenAI `__oppref` / `__obref` cookies at checkout so
- * the server-side event can carry them.
+ * Also captures every provider's attribution cookies (OpenAI `__oppref` /
+ * `__obref`, Meta `_fbp` / `_fbc`, ...) at checkout so the server-side event
+ * can carry them.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -21,8 +22,7 @@ class OpenPixel_Integration_WooCommerce {
 
 	const META_PIXEL_FIRED = '_openpixel_pixel_fired';
 	const META_CAPI_QUEUED = '_openpixel_capi_queued';
-	const META_OPPREF      = '_openpixel_oppref';
-	const META_OBREF       = '_openpixel_obref';
+	const META_ATTRIBUTION = '_openpixel_'; // + context key, e.g. _openpixel_oppref
 
 	/** @var OpenPixel_Core */
 	private $core;
@@ -120,6 +120,7 @@ class OpenPixel_Integration_WooCommerce {
 				'currency'     => get_woocommerce_currency(),
 				'value'        => (float) wc_get_price_to_display( $product ),
 				'content_type' => 'product',
+				'source'       => 'woocommerce',
 				'items'        => array( $this->product_item( $product, 1 ) ),
 			)
 		);
@@ -147,6 +148,7 @@ class OpenPixel_Integration_WooCommerce {
 				'currency'     => get_woocommerce_currency(),
 				'value'        => (float) $cart->get_total( 'edit' ),
 				'content_type' => 'product',
+				'source'       => 'woocommerce',
 				'items'        => $items,
 			)
 		);
@@ -172,6 +174,7 @@ class OpenPixel_Integration_WooCommerce {
 				'currency'     => $order->get_currency(),
 				'value'        => (float) $order->get_total(),
 				'content_type' => 'product',
+				'source'       => 'woocommerce',
 				'items'        => $this->order_items( $order ),
 			)
 		);
@@ -223,6 +226,7 @@ class OpenPixel_Integration_WooCommerce {
 				'currency'     => get_woocommerce_currency(),
 				'value'        => $price * $quantity,
 				'content_type' => 'product',
+				'source'       => 'woocommerce',
 				'items'        => array( $item ),
 			),
 			true
@@ -258,15 +262,25 @@ class OpenPixel_Integration_WooCommerce {
 			return;
 		}
 
-		$oppref = isset( $_COOKIE['__oppref'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['__oppref'] ) ) : '';
-		$obref  = isset( $_COOKIE['__obref'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['__obref'] ) ) : '';
+		foreach ( $this->attribution_cookies() as $key => $cookie ) {
+			$value = isset( $_COOKIE[ $cookie ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $cookie ] ) ) : '';
+			if ( '' !== $value ) {
+				$order->update_meta_data( self::META_ATTRIBUTION . $key, $value );
+			}
+		}
+	}
 
-		if ( $oppref ) {
-			$order->update_meta_data( self::META_OPPREF, $oppref );
+	/**
+	 * Attribution cookies of all enabled providers: context key => cookie name.
+	 */
+	private function attribution_cookies() {
+		$cookies = array();
+		foreach ( $this->core->get_providers() as $provider ) {
+			if ( $provider->is_enabled() ) {
+				$cookies = array_merge( $cookies, $provider->get_attribution_cookies() );
+			}
 		}
-		if ( $obref ) {
-			$order->update_meta_data( self::META_OBREF, $obref );
-		}
+		return $cookies;
 	}
 
 	public function track_server_purchase( $order_id ) {
@@ -277,6 +291,11 @@ class OpenPixel_Integration_WooCommerce {
 
 		$paid_at = $order->get_date_paid() ? $order->get_date_paid() : $order->get_date_created();
 
+		$attribution = array();
+		foreach ( array_keys( $this->attribution_cookies() ) as $key ) {
+			$attribution[ $key ] = $order->get_meta( self::META_ATTRIBUTION . $key );
+		}
+
 		$this->core->get_bus()->track(
 			array(
 				'name'         => 'purchase',
@@ -284,17 +303,19 @@ class OpenPixel_Integration_WooCommerce {
 				'currency'     => $order->get_currency(),
 				'value'        => (float) $order->get_total(),
 				'content_type' => 'product',
+				'source'       => 'woocommerce',
 				'items'        => $this->order_items( $order, true ),
 				'user'         => $this->order_user_data( $order ),
 				'channel'      => 'server',
-				'context'      => array(
-					'timestamp_ms'  => $paid_at ? $paid_at->getTimestamp() * 1000 : (int) round( microtime( true ) * 1000 ),
-					'action_source' => 'web',
-					'source_url'    => $order->get_checkout_order_received_url(),
-					'ip_address'    => $order->get_customer_ip_address(),
-					'user_agent'    => $order->get_customer_user_agent(),
-					'oppref'        => $order->get_meta( self::META_OPPREF ),
-					'obref'         => $order->get_meta( self::META_OBREF ),
+				'context'      => array_merge(
+					$attribution,
+					array(
+						'timestamp_ms'  => $paid_at ? $paid_at->getTimestamp() * 1000 : (int) round( microtime( true ) * 1000 ),
+						'action_source' => 'web',
+						'source_url'    => $order->get_checkout_order_received_url(),
+						'ip_address'    => $order->get_customer_ip_address(),
+						'user_agent'    => $order->get_customer_user_agent(),
+					)
 				),
 			)
 		);

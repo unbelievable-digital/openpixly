@@ -341,6 +341,28 @@ class OpenPixel_Provider_OpenAI extends OpenPixel_Provider {
 		$this->capi()->queue_event( $event );
 	}
 
+	public function get_attribution_cookies() {
+		return array(
+			'oppref' => '__oppref',
+			'obref'  => '__obref',
+		);
+	}
+
+	public function get_server_test_description() {
+		if ( ! $this->get_setting( 'capi_enabled' ) ) {
+			return '';
+		}
+		return __( 'Sends one order_created event with validate_only = true. Nothing is recorded; OpenAI only checks the key and payload.', 'openpixly' );
+	}
+
+	public function send_server_test( array $event ) {
+		$result = $this->capi()->send( array( $this->to_capi_event( $event ) ), true );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return __( 'OpenAI Conversions API accepted the test event (validate_only). Credentials and payload are valid.', 'openpixly' );
+	}
+
 	/**
 	 * Map a normalized event to a Conversions API event object.
 	 *

@@ -4,7 +4,7 @@
  *
  * Tab "Pixels": every registered provider's declarative fields, so a new
  * provider gets a settings section without touching this file.
- * Tab "Product feed": WooCommerce catalog feed for OpenAI Ads.
+ * Tab "Product feed": WooCommerce catalog feed for OpenAI Ads and the Meta catalog.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -107,10 +107,11 @@ class OpenPixel_Admin {
 		}
 		check_admin_referer( 'openpixel_capi_test' );
 
-		$provider = $this->core->get_provider( 'openai' );
+		$id       = isset( $_POST['provider'] ) ? sanitize_key( wp_unslash( $_POST['provider'] ) ) : '';
+		$provider = $this->core->get_provider( $id );
 
-		if ( $provider instanceof OpenPixel_Provider_OpenAI ) {
-			$event = $provider->to_capi_event(
+		if ( $provider && $provider->get_server_test_description() ) {
+			$result = $provider->send_server_test(
 				array(
 					'name'         => 'purchase',
 					'event_id'     => 'openpixel_test_' . time(),
@@ -124,16 +125,15 @@ class OpenPixel_Admin {
 					'custom_name'  => '',
 					'user'         => array(),
 					'channel'      => 'server',
+					'source'       => '',
 					'context'      => array( 'source_url' => home_url( '/' ), 'action_source' => 'web' ),
 				)
 			);
 
-			$result = $provider->capi()->send( array( $event ), true );
-
 			if ( is_wp_error( $result ) ) {
 				$this->notice( 'error', $result->get_error_message() );
 			} else {
-				$this->notice( 'success', __( 'Conversions API accepted the test event (validate_only). Credentials and payload are valid.', 'openpixly' ) );
+				$this->notice( 'success', $result );
 			}
 		}
 
@@ -178,7 +178,7 @@ class OpenPixel_Admin {
 
 		OpenPixel_Product_Feed::delete_files();
 		OpenPixel_Product_Feed::rotate_token();
-		$this->notice( 'success', __( 'Feed URL rotated. The old URL no longer works; rebuild the feed and give OpenAI the new URL.', 'openpixly' ) );
+		$this->notice( 'success', __( 'Feed URL rotated. The old URLs no longer work; rebuild the feed and give OpenAI (and Meta) the new URL.', 'openpixly' ) );
 
 		wp_safe_redirect( $this->page_url( 'feed' ) );
 		exit;
@@ -355,19 +355,27 @@ class OpenPixel_Admin {
 	}
 
 	private function render_capi_test() {
-		$provider = $this->core->get_provider( 'openai' );
-		if ( ! $provider instanceof OpenPixel_Provider_OpenAI || ! $provider->get_setting( 'capi_enabled' ) ) {
-			return;
+		foreach ( $this->core->get_providers() as $id => $provider ) {
+			$description = $provider->get_server_test_description();
+			if ( ! $description ) {
+				continue;
+			}
+			?>
+			<h2 class="title">
+				<?php
+				/* translators: %s: provider name */
+				printf( esc_html__( 'Test the Conversions API: %s', 'openpixly' ), esc_html( $provider->get_label() ) );
+				?>
+			</h2>
+			<p><?php echo esc_html( $description ); ?></p>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="openpixel_capi_test" />
+				<input type="hidden" name="provider" value="<?php echo esc_attr( $id ); ?>" />
+				<?php wp_nonce_field( 'openpixel_capi_test' ); ?>
+				<?php submit_button( __( 'Send test event', 'openpixly' ), 'secondary', 'submit', false ); ?>
+			</form>
+			<?php
 		}
-		?>
-		<h2 class="title"><?php esc_html_e( 'Test the Conversions API', 'openpixly' ); ?></h2>
-		<p><?php esc_html_e( 'Sends one order_created event with validate_only = true. Nothing is recorded; OpenAI only checks the key and payload.', 'openpixly' ); ?></p>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-			<input type="hidden" name="action" value="openpixel_capi_test" />
-			<?php wp_nonce_field( 'openpixel_capi_test' ); ?>
-			<?php submit_button( __( 'Send test event', 'openpixly' ), 'secondary', 'submit', false ); ?>
-		</form>
-		<?php
 	}
 
 	private function render_status() {
@@ -376,9 +384,10 @@ class OpenPixel_Admin {
 		?>
 		<h2 class="title"><?php esc_html_e( 'Status', 'openpixly' ); ?></h2>
 		<ul class="openpixel-status">
-			<li><?php echo $wc_active ? '✅' : '➖'; ?> <?php esc_html_e( 'WooCommerce', 'openpixly' ); ?>: <?php echo $wc_active ? esc_html__( 'active — product, cart, checkout and order events are tracked.', 'openpixly' ) : esc_html__( 'not active — only page_viewed and registration events are tracked.', 'openpixly' ); ?></li>
+			<li><?php echo $wc_active ? '✅' : '➖'; ?> <?php esc_html_e( 'WooCommerce', 'openpixly' ); ?>: <?php echo $wc_active ? esc_html__( 'active — product, cart, checkout and order events are tracked.', 'openpixly' ) : esc_html__( 'not active — only page view and registration events are tracked.', 'openpixly' ); ?></li>
 			<li><?php echo $as_active ? '✅' : '➖'; ?> <?php esc_html_e( 'Action Scheduler', 'openpixly' ); ?>: <?php echo $as_active ? esc_html__( 'available — server-side events are queued with retries.', 'openpixly' ) : esc_html__( 'not available — WP-Cron is used instead.', 'openpixly' ); ?></li>
 			<li>ℹ️ <?php esc_html_e( 'If your site enforces a Content Security Policy, allow script-src https://bzrcdn.openai.com, connect-src https://bzr.openai.com https://bzrcdn.openai.com and img-src https://bzr.openai.com.', 'openpixly' ); ?></li>
+			<li>ℹ️ <?php esc_html_e( 'For the Meta pixel also allow script-src https://connect.facebook.net and connect-src / img-src https://www.facebook.com.', 'openpixly' ); ?></li>
 		</ul>
 		<?php
 	}
@@ -392,7 +401,7 @@ class OpenPixel_Admin {
 		$status   = OpenPixel_Product_Feed::get_status();
 		$wc       = class_exists( 'WooCommerce' );
 		?>
-		<p><?php esc_html_e( 'Builds a product catalog file from WooCommerce in the OpenAI product feed format so ChatGPT Ads can run product-feed campaigns. Give OpenAI the private URL below, or download the file and upload it to the SFTP location shown in Ads Manager > Feeds.', 'openpixly' ); ?></p>
+		<p><?php esc_html_e( 'Builds a product catalog file from WooCommerce in the OpenAI product feed format so ChatGPT Ads can run product-feed campaigns. Give OpenAI the private URL below, or download the file and upload it to the SFTP location shown in Ads Manager > Feeds. The same build can also write a Meta (Facebook & Instagram) catalog feed.', 'openpixly' ); ?></p>
 
 		<?php if ( ! $wc ) : ?>
 			<div class="notice notice-warning inline"><p><?php esc_html_e( 'WooCommerce is not active; the product feed needs WooCommerce products.', 'openpixly' ); ?></p></div>
@@ -413,6 +422,15 @@ class OpenPixel_Admin {
 					<p class="description"><?php esc_html_e( 'Anyone with this URL can read your catalog. Rotate it if it leaks.', 'openpixly' ); ?></p>
 				</td>
 			</tr>
+			<?php if ( ! empty( $settings['meta_catalog'] ) ) : ?>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Meta catalog URL', 'openpixly' ); ?></th>
+					<td>
+						<input type="text" class="large-text code" readonly value="<?php echo esc_attr( OpenPixel_Product_Feed::get_meta_feed_url() ); ?>" onclick="this.select();" />
+						<p class="description"><?php esc_html_e( 'CSV in the Meta catalog format. In Commerce Manager choose Catalog > Data sources > Data feed > Scheduled feed and paste this URL. Rebuild after switching the Meta catalog on.', 'openpixly' ); ?></p>
+					</td>
+				</tr>
+			<?php endif; ?>
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Status', 'openpixly' ); ?></th>
 				<td>
@@ -454,6 +472,9 @@ class OpenPixel_Admin {
 			</form>
 			<?php if ( 'ready' === $status['state'] ) : ?>
 				<a class="button" href="<?php echo esc_url( OpenPixel_Product_Feed::get_feed_url( true ) ); ?>"><?php esc_html_e( 'Download', 'openpixly' ); ?></a>
+				<?php if ( $status['meta_file'] ) : ?>
+					<a class="button" href="<?php echo esc_url( OpenPixel_Product_Feed::get_meta_feed_url( true ) ); ?>"><?php esc_html_e( 'Download Meta catalog', 'openpixly' ); ?></a>
+				<?php endif; ?>
 			<?php endif; ?>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline-block;margin-left:8px" onsubmit="return confirm('<?php echo esc_js( __( 'Rotate the feed URL? The current URL stops working immediately.', 'openpixly' ) ); ?>');">
 				<input type="hidden" name="action" value="openpixel_feed_rotate" />

@@ -110,6 +110,62 @@ class OpenPixel_Hash {
 	}
 
 	/**
+	 * Meta customer information parameters, normalized as documented at
+	 * https://developers.facebook.com/docs/marketing-api/conversions-api/parameters/customer-information-parameters
+	 * and SHA-256 hashed. Same keys for fbq("init") advanced matching and the
+	 * Conversions API `user_data` object.
+	 *
+	 *  em          trim, lowercase
+	 *  ph          digits only, no leading zeroes (country code expected)
+	 *  fn / ln     lowercase, no punctuation
+	 *  ct          lowercase, no punctuation, no spaces
+	 *  st          lowercase, no punctuation, no spaces (2-letter code in the US)
+	 *  zp          lowercase, no spaces or dashes; first 5 digits in the US
+	 *  country     lowercase ISO 3166-1 alpha-2
+	 *  external_id trim
+	 *
+	 * @param array $raw Same keys as pixel_user().
+	 * @return array
+	 */
+	public static function meta_user( array $raw ) {
+		$lower = function ( $value ) {
+			$value = trim( (string) $value );
+			return function_exists( 'mb_strtolower' ) ? mb_strtolower( $value, 'UTF-8' ) : strtolower( $value );
+		};
+		$punct = '!-\/:-@\[-`{-~';
+
+		$country = isset( $raw['country'] ) ? $lower( $raw['country'] ) : '';
+		$zip     = isset( $raw['postal_code'] ) ? preg_replace( '/[\s\-]/u', '', $lower( $raw['postal_code'] ) ) : '';
+		if ( 'us' === $country ) {
+			$zip = substr( $zip, 0, 5 );
+		}
+
+		$normalized = array(
+			'em'          => isset( $raw['email'] ) && is_email( trim( (string) $raw['email'] ) ) ? $lower( $raw['email'] ) : '',
+			'ph'          => isset( $raw['phone'] ) ? ltrim( preg_replace( '/\D/', '', (string) $raw['phone'] ), '0' ) : '',
+			'fn'          => isset( $raw['first_name'] ) ? trim( preg_replace( '/[' . $punct . ']/u', '', $lower( $raw['first_name'] ) ) ) : '',
+			'ln'          => isset( $raw['last_name'] ) ? trim( preg_replace( '/[' . $punct . ']/u', '', $lower( $raw['last_name'] ) ) ) : '',
+			'ct'          => isset( $raw['city'] ) ? preg_replace( '/[\s' . $punct . ']/u', '', $lower( $raw['city'] ) ) : '',
+			'st'          => isset( $raw['region'] ) ? preg_replace( '/[\s' . $punct . ']/u', '', $lower( $raw['region'] ) ) : '',
+			'zp'          => $zip,
+			'country'     => preg_match( '/^[a-z]{2}$/', $country ) ? $country : '',
+			'external_id' => isset( $raw['external_id'] ) ? trim( (string) $raw['external_id'] ) : '',
+		);
+
+		if ( strlen( $normalized['ph'] ) < 7 || strlen( $normalized['ph'] ) > 15 ) {
+			$normalized['ph'] = '';
+		}
+
+		$user = array();
+		foreach ( $normalized as $key => $value ) {
+			if ( '' !== $value && null !== $value ) {
+				$user[ $key ] = self::sha256( $value );
+			}
+		}
+		return $user;
+	}
+
+	/**
 	 * Build the Conversions-API-shaped `user` object (plural list keys).
 	 *
 	 * @param array $raw Same keys as pixel_user() plus: ip_address, user_agent, obref.

@@ -1,16 +1,19 @@
 <?php
 /**
- * WooCommerce → OpenAI product feed.
+ * WooCommerce → OpenAI product feed, plus an optional Meta catalog feed.
  *
  * Spec: https://developers.openai.com/commerce/specs/file-upload/products
  * Ads:  https://developers.openai.com/ads/product-feeds
+ * Meta: https://developers.facebook.com/docs/marketing-api/catalog/reference
  *
  * - One row per simple product or per variation (group_id = parent, variant_dict).
  * - OpenAI format (item_id, url, image_url, seller_name, is_ads_eligible, ...)
  *   or the Google-compatible profile (id, link, image_link, item_group_id, ...).
  * - CSV / TSV / JSONL, built in batches (inline for "Regenerate now", via
  *   Action Scheduler on a schedule) into wp-content/uploads/openpixly/.
- * - Served at ?openpixel_feed=<secret token>, noindex, no-cache.
+ * - Served at /openpixly-feed/<secret token>/products.<ext>, noindex, no-cache.
+ * - The Meta catalog (always CSV, Meta field names and values) is written in
+ *   the same build pass and served at /openpixly-feed/<token>/meta-catalog.csv.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -42,6 +45,14 @@ class OpenPixel_Product_Feed {
 		'gtin', 'mpn', 'identifier_exists', 'condition', 'product_type', 'color',
 		'size', 'material', 'shipping_weight', 'custom_label_0',
 	);
+
+	const META_COLUMNS = array(
+		'id', 'title', 'description', 'availability', 'condition', 'price', 'link',
+		'image_link', 'brand', 'sale_price', 'item_group_id', 'additional_image_link',
+		'gtin', 'mpn', 'product_type', 'color', 'size', 'material',
+	);
+
+	const META_FILENAME = 'meta-catalog.csv';
 
 	public function init() {
 		add_action( 'init', array( $this, 'maybe_serve' ), 1 );
@@ -115,6 +126,13 @@ class OpenPixel_Product_Feed {
 					'daily'      => __( 'Daily', 'openpixly' ),
 					'manual'     => __( 'Manual only', 'openpixly' ),
 				),
+			),
+			'meta_catalog'     => array(
+				'section'     => __( 'Meta (Facebook & Instagram) catalog', 'openpixly' ),
+				'label'       => __( 'Also build a Meta catalog feed', 'openpixly' ),
+				'type'        => 'checkbox',
+				'default'     => false,
+				'description' => __( 'Writes a second CSV with Meta\'s catalog fields (id, title, description, availability, condition, price, link, image_link, brand, item_group_id, ...) in the same build. Add its URL in Commerce Manager > Catalog > Data sources > Data feed > Scheduled feed.', 'openpixly' ),
 			),
 		);
 	}
@@ -190,6 +208,8 @@ class OpenPixel_Product_Feed {
 				'message'    => '',
 				'next_page'  => 1,
 				'tmp_file'   => '',
+				'meta_file'     => '',
+				'meta_tmp_file' => '',
 			)
 		);
 	}
@@ -218,18 +238,26 @@ class OpenPixel_Product_Feed {
 		return $download ? add_query_arg( 'download', 1, $url ) : $url;
 	}
 
+	/** Meta catalog URL (only serves a file when "meta_catalog" is on). */
+	public static function get_meta_feed_url( $download = false ) {
+		$settings = self::get_settings();
+		$url      = home_url( self::PATH_BASE . '/' . $settings['token'] . '/' . self::META_FILENAME );
+		return $download ? add_query_arg( 'download', 1, $url ) : $url;
+	}
+
 	/**
-	 * Token from /openpixly-feed/<token>/products.<ext> or ?openpixel_feed=<token>.
+	 * Token and feed from /openpixly-feed/<token>/products.<ext>,
+	 * /openpixly-feed/<token>/meta-catalog.csv or ?openpixel_feed=<token>.
 	 *
-	 * @return string Empty when the request is not a feed request.
+	 * @return array|null array( token, 'primary' | 'meta' ), null when the request is not a feed request.
 	 */
-	private static function requested_token() {
+	private static function requested_feed() {
 		if ( ! empty( $_GET[ self::QUERY_VAR ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return array( sanitize_text_field( wp_unslash( $_GET[ self::QUERY_VAR ] ) ), 'primary' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
 
 		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
-			return '';
+			return null;
 		}
 
 		$path = (string) wp_parse_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ), PHP_URL_PATH );
@@ -241,11 +269,11 @@ class OpenPixel_Product_Feed {
 		}
 		$path = preg_replace( '#^/(index\.php/)?#', '', $path );
 
-		if ( preg_match( '#^' . preg_quote( self::PATH_BASE, '#' ) . '/([A-Za-z0-9]{16,64})/products\.(csv|tsv|jsonl|txt)$#', $path, $m ) ) {
-			return $m[1];
+		if ( preg_match( '#^' . preg_quote( self::PATH_BASE, '#' ) . '/([A-Za-z0-9]{16,64})/(products\.(?:csv|tsv|jsonl|txt)|' . preg_quote( self::META_FILENAME, '#' ) . ')$#', $path, $m ) ) {
+			return array( $m[1], self::META_FILENAME === $m[2] ? 'meta' : 'primary' );
 		}
 
-		return '';
+		return null;
 	}
 
 	private static function get_dir() {
@@ -275,42 +303,45 @@ class OpenPixel_Product_Feed {
 	}
 
 	/**
-	 * Serve the feed when ?openpixel_feed=<token> matches.
+	 * Serve the requested feed when the token matches.
 	 */
 	public function maybe_serve() {
-		$token = self::requested_token();
-		if ( '' === $token ) {
+		$requested = self::requested_feed();
+		if ( ! $requested ) {
 			return;
 		}
+		list( $token, $feed ) = $requested;
+		$is_meta              = 'meta' === $feed;
 
 		$settings = self::get_settings();
 
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow' );
 
-		if ( empty( $settings['enabled'] ) || ! hash_equals( $settings['token'], $token ) ) {
+		if ( empty( $settings['enabled'] ) || ! hash_equals( $settings['token'], $token ) || ( $is_meta && empty( $settings['meta_catalog'] ) ) ) {
 			status_header( 404 );
 			exit( 'Not found.' );
 		}
 
 		$status = self::get_status();
-		if ( 'ready' !== $status['state'] || ! $status['file'] || ! file_exists( $status['file'] ) ) {
+		$file   = $is_meta ? $status['meta_file'] : $status['file'];
+		if ( 'ready' !== $status['state'] || ! $file || ! file_exists( $file ) ) {
 			status_header( 503 );
 			header( 'Retry-After: 300' );
 			exit( 'Feed is not generated yet. Rebuild it from Settings > Pixel Manager > Product feed.' );
 		}
 
-		$format   = $status['format'];
-		$filename = 'products.' . OpenPixel_Feed_Writer::extension( $format );
+		$format   = $is_meta ? 'csv' : $status['format'];
+		$filename = $is_meta ? self::META_FILENAME : 'products.' . OpenPixel_Feed_Writer::extension( $format );
 
 		header( 'Content-Type: ' . OpenPixel_Feed_Writer::mime( $format ) . '; charset=utf-8' );
-		header( 'Content-Length: ' . filesize( $status['file'] ) );
+		header( 'Content-Length: ' . filesize( $file ) );
 		header( 'Last-Modified: ' . gmdate( 'D, d M Y H:i:s', (int) $status['finished'] ) . ' GMT' );
 		if ( ! empty( $_GET['download'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
 		}
 
-		readfile( $status['file'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
+		readfile( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
 		exit;
 	}
 
@@ -381,6 +412,10 @@ class OpenPixel_Product_Feed {
 		if ( file_exists( $tmp ) ) {
 			wp_delete_file( $tmp );
 		}
+		$meta_tmp = ! empty( $settings['meta_catalog'] ) ? self::file_path( 'csv', '-meta.building' ) : '';
+		if ( $meta_tmp && file_exists( $meta_tmp ) ) {
+			wp_delete_file( $meta_tmp );
+		}
 		self::set_status(
 			array(
 				'state'     => 'building',
@@ -391,6 +426,7 @@ class OpenPixel_Product_Feed {
 				'message'   => '',
 				'next_page' => 1,
 				'tmp_file'  => $tmp,
+				'meta_tmp_file' => $meta_tmp,
 				'format'    => $settings['format'],
 				'profile'   => $settings['profile'],
 			)
@@ -415,6 +451,7 @@ class OpenPixel_Product_Feed {
 
 		try {
 			$writer = OpenPixel_Feed_Writer::open_append( $tmp_file, $settings['format'], $this->columns( $settings['profile'] ) );
+			$meta   = $status['meta_tmp_file'] ? OpenPixel_Feed_Writer::open_append( $status['meta_tmp_file'], 'csv', $this->columns( 'meta' ) ) : null;
 
 			$query = new WC_Product_Query(
 				array(
@@ -432,7 +469,7 @@ class OpenPixel_Product_Feed {
 			$rows = 0;
 			$skip = 0;
 			foreach ( $products as $product ) {
-				foreach ( $this->product_rows( $product, $settings ) as $row ) {
+				foreach ( $this->product_rows( $product, $settings, $settings['profile'] ) as $row ) {
 					if ( null === $row ) {
 						$skip++;
 						continue;
@@ -440,8 +477,16 @@ class OpenPixel_Product_Feed {
 					$writer->write( $row );
 					$rows++;
 				}
+				if ( $meta ) {
+					foreach ( array_filter( $this->product_rows( $product, $settings, 'meta' ) ) as $row ) {
+						$meta->write( $row );
+					}
+				}
 			}
 			$writer->close();
+			if ( $meta ) {
+				$meta->close();
+			}
 
 			self::set_status(
 				array(
@@ -474,17 +519,25 @@ class OpenPixel_Product_Feed {
 			$writer->write_header();
 			$writer->close();
 		}
-		// Remove old feeds in other formats.
+		$meta_tmp   = self::get_status()['meta_tmp_file'];
+		$meta_final = $meta_tmp ? self::file_path( 'csv', '-meta' ) : '';
+		if ( $meta_tmp && ( ! file_exists( $meta_tmp ) || 0 === filesize( $meta_tmp ) ) ) {
+			$writer = new OpenPixel_Feed_Writer( $meta_tmp, 'csv', $this->columns( 'meta' ) );
+			$writer->write_header();
+			$writer->close();
+		}
+
+		// Remove old feeds in other formats (and the Meta catalog once it is switched off).
 		foreach ( glob( self::get_dir() . '/feed-*' ) as $file ) {
-			if ( $file !== $tmp_file ) {
+			if ( $file !== $tmp_file && $file !== $meta_tmp ) {
 				wp_delete_file( $file );
 			}
 		}
-		if ( ! self::move_file( $tmp_file, $final ) ) {
+		if ( ! self::move_file( $tmp_file, $final ) || ( $meta_tmp && ! self::move_file( $meta_tmp, $meta_final ) ) ) {
 			self::set_status( array( 'state' => 'error', 'message' => 'Could not move the finished feed into place.', 'finished' => time() ) );
 			return;
 		}
-		self::set_status( array( 'state' => 'ready', 'finished' => time(), 'file' => $final, 'tmp_file' => '', 'message' => '' ) );
+		self::set_status( array( 'state' => 'ready', 'finished' => time(), 'file' => $final, 'tmp_file' => '', 'meta_file' => $meta_final, 'meta_tmp_file' => '', 'message' => '' ) );
 		do_action( 'openpixel_feed_built', $final, self::get_status() );
 	}
 
@@ -513,14 +566,14 @@ class OpenPixel_Product_Feed {
 	 * ------------------------------------------------------------------ */
 
 	private function columns( $profile ) {
-		$columns = 'google' === $profile ? self::GOOGLE_COLUMNS : self::OPENAI_COLUMNS;
+		$columns = 'meta' === $profile ? self::META_COLUMNS : ( 'google' === $profile ? self::GOOGLE_COLUMNS : self::OPENAI_COLUMNS );
 		return apply_filters( 'openpixel_feed_columns', $columns, $profile );
 	}
 
 	/**
 	 * @return array[] Rows (null entries = skipped).
 	 */
-	private function product_rows( WC_Product $product, array $settings ) {
+	private function product_rows( WC_Product $product, array $settings, $profile ) {
 		if ( 'visible' !== $product->get_catalog_visibility() && 'search' !== $product->get_catalog_visibility() ) {
 			return array( null );
 		}
@@ -532,19 +585,20 @@ class OpenPixel_Product_Feed {
 				if ( ! $variation || 'publish' !== $variation->get_status() ) {
 					continue;
 				}
-				$rows[] = $this->build_row( $variation, $product, $settings );
+				$rows[] = $this->build_row( $variation, $product, $settings, $profile );
 			}
 			return $rows;
 		}
 
-		return array( $this->build_row( $product, null, $settings ) );
+		return array( $this->build_row( $product, null, $settings, $profile ) );
 	}
 
 	/**
 	 * @param WC_Product      $product Simple product or variation.
 	 * @param WC_Product|null $parent  Parent for variations.
+	 * @param string          $profile openai | google | meta
 	 */
-	private function build_row( WC_Product $product, $parent, array $settings ) {
+	private function build_row( WC_Product $product, $parent, array $settings, $profile ) {
 		$is_variation = null !== $parent;
 		$source       = $is_variation ? $parent : $product; // for description, brand, categories, images fallback
 
@@ -567,8 +621,9 @@ class OpenPixel_Product_Feed {
 			return null; // brand is required
 		}
 
-		$description = $this->plain( $source->get_description() ?: $source->get_short_description() ?: $source->get_name(), 5000 );
-		$title       = $this->plain( $product->get_name(), 150 );
+		// Meta allows 200 / 9999 characters, the OpenAI spec 150 / 5000.
+		$description = $this->plain( $source->get_description() ?: $source->get_short_description() ?: $source->get_name(), 'meta' === $profile ? 9999 : 5000 );
+		$title       = $this->plain( $product->get_name(), 'meta' === $profile ? 200 : 150 );
 		$image       = $this->image_url( $product ) ?: $this->image_url( $source );
 		$images      = $this->gallery_urls( $source );
 		$url         = $product->get_permalink();
@@ -586,7 +641,29 @@ class OpenPixel_Product_Feed {
 		$digital     = $product->is_virtual() || $product->is_downloadable();
 		$category    = $this->category_path( $source );
 
-		if ( 'google' === $settings['profile'] ) {
+		if ( 'meta' === $profile ) {
+			// Meta only accepts "in stock" / "out of stock"; a backorderable product can be bought.
+			$row = array(
+				'id'                    => $item_id,
+				'title'                 => $title,
+				'description'           => $description,
+				'availability'          => 'outofstock' === $product->get_stock_status() ? 'out of stock' : 'in stock',
+				'condition'             => 'new',
+				'price'                 => $regular,
+				'link'                  => $url,
+				'image_link'            => $image,
+				'brand'                 => $this->plain( $brand, 100 ),
+				'sale_price'            => $sale,
+				'item_group_id'         => $group_id,
+				'additional_image_link' => $images,
+				'gtin'                  => $gtin,
+				'mpn'                   => $mpn,
+				'product_type'          => $category,
+				'color'                 => $this->pick_variant( $variant, array( 'color', 'colour' ) ),
+				'size'                  => $this->pick_variant( $variant, array( 'size' ) ),
+				'material'              => $this->pick_variant( $variant, array( 'material' ) ),
+			);
+		} elseif ( 'google' === $profile ) {
 			$row = array(
 				'id'                    => $item_id,
 				'item_group_id'         => $group_id,
@@ -657,7 +734,7 @@ class OpenPixel_Product_Feed {
 		 * @param WC_Product|null $parent
 		 * @param string $profile
 		 */
-		return apply_filters( 'openpixel_feed_row', $row, $product, $parent, $settings['profile'] );
+		return apply_filters( 'openpixel_feed_row', $row, $product, $parent, $profile );
 	}
 
 	private function money( WC_Product $product, $price, $currency ) {

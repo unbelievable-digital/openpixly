@@ -47,6 +47,7 @@ WordPress plugin: conversion pixel manager + product feed for ChatGPT Ads. Lives
 
 - `npx pressship verify ./openpixly` → `pack` → `publish --submit --dry-run -y`. Real submit needs `pressship login`; the CLI's overview prompt needs a TTY, so call `submit()` from `pressship/dist/wordpress-org/submit.js` with `{ yes: true, overview }` from a script instead of `expect` (spinner floods a pty).
 - Released: 1.2.0 live at https://wordpress.org/plugins/openpixly/ (SVN r3689603 code, r3689605 assets, 2026-09-10; git tag `v1.2.0`).
+- Released: 1.3.0 (Meta pixel, Conversions API, catalog feed) SVN r3704553, 2026-09-20; git tag `v1.3.0`.
 - Next releases: bump version (header, `OPENPIXEL_VERSION`, `Stable tag`, changelog), then `npx pressship release ./openpixly --slug openpixly --username zgrkaralar -y`. Do NOT pass `--version`: the CLI treats it as its own version flag and just prints `0.1.0`; the version comes from the plugin header.
 - SVN password is saved in `~/.config/pressship/svn-credentials.json` (mode 600, never commit). Working copy is `.pressship-svn/openpixly` (gitignored).
 - Pressship does not upload `.wordpress-org/` images. When icons/banners change: copy them into `.pressship-svn/openpixly/assets/`, `svn add`, `svn propset svn:mime-type image/png assets/*.png`, `svn commit`.

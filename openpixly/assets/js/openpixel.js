@@ -117,7 +117,13 @@
 		}
 	};
 
+	var consentState = null;
+
 	function setConsent(granted) {
+		if (consentState === granted) {
+			return;
+		}
+		consentState = granted;
 		Object.keys(consentSetters).forEach(function (id) {
 			consentSetters[id](granted);
 		});
@@ -139,10 +145,26 @@
 	}
 
 	// WP Consent API (https://wordpress.org/plugins/wp-consent-api/) integration.
-	if (consentRequired()) {
-		if (typeof window.wp_has_consent === 'function' && window.wp_has_consent('marketing')) {
+	// The API script is a declared dependency, but a theme or cache plugin can
+	// still reorder footer scripts, so the check is repeated once the DOM and
+	// the page have loaded, with the consent cookie itself as a last resort.
+	function marketingConsentGranted() {
+		if (typeof window.wp_has_consent === 'function') {
+			return !!window.wp_has_consent('marketing');
+		}
+		return /(?:^|;\s*)wp_consent_marketing=allow(?:;|$)/.test(document.cookie);
+	}
+
+	function syncConsent() {
+		if (marketingConsentGranted()) {
 			openPixel.grantConsent();
 		}
+	}
+
+	if (consentRequired()) {
+		syncConsent();
+		document.addEventListener('DOMContentLoaded', syncConsent);
+		window.addEventListener('load', syncConsent);
 		document.addEventListener('wp_listen_for_consent_change', function (e) {
 			var detail = e && e.detail;
 			if (!detail) {

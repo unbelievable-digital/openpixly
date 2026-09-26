@@ -144,7 +144,7 @@ Then register a JS handler: `window.openPixel.register('tiktok', function (p) { 
 - `openpixel_pixel_providers` — register providers.
 - `openpixel_track_event( $event )` — modify or drop (return `null`) any event before providers see it.
 - `openpixel_track_page_view` — return `false` to skip automatic `page_viewed`.
-- `openpixel_consent_granted( bool, $provider_id )` — tell the plugin consent is already granted (e.g. from a cookie) so it does not emit `consent(false)`.
+- `openpixel_consent_granted( bool, $provider_id )` — tell the plugin consent is already granted (e.g. from a cookie) so it does not emit `consent(false)`. Wired by default to `wp_has_consent( 'marketing' )` when a consent management plugin has registered with the WP Consent API.
 - `openpixel_script_nonce` — CSP nonce for inline scripts.
 - `openpixel_currency_exponent( int, $currency )` — override minor-unit digits.
 - `openpixel_wc_product_item( $item, $product, $quantity )` — adjust WooCommerce item data.

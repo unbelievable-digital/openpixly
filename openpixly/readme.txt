@@ -4,7 +4,7 @@ Tags: openai, chatgpt ads, meta pixel, conversion tracking, woocommerce
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -43,7 +43,7 @@ events" switch.
 
 Choose "Require consent first" to initialize the pixel with consent set to
 `false`. Grant consent from your cookie banner with `window.openPixel.grantConsent()`;
-the WP Consent API "marketing" category is detected automatically.
+the WP Consent API "marketing" category is detected automatically, on the server (no consent = false is printed once the category is allowed) and in the browser.
 
 = Conversions API =
 
@@ -126,6 +126,9 @@ and `img-src https://bzr.openai.com`. For the Meta pixel add `script-src https:/
 Yes. The plugin only uses the WooCommerce CRUD order API and declares HPOS compatibility.
 
 == Changelog ==
+
+= 1.3.1 =
+* Fix: with "Require consent first" and the WP Consent API, consent granted on an earlier page was lost on templates where openpixel.js loaded before wp-consent-api.js, so no events fired (GitHub #1). The runtime now depends on the wp-consent-api script, re-checks consent after the DOM and page load, and the server no longer prints consent = false when the consent management plugin already reports "marketing" as allowed.
 
 = 1.3.0 =
 * New: Meta (Facebook & Instagram) Pixel provider: PageView, ViewContent, AddToCart, InitiateCheckout, Purchase, CompleteRegistration and custom events, hashed advanced matching, consent mode, noscript fallback.

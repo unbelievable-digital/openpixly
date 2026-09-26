@@ -30,7 +30,10 @@ class OpenPixel_Core {
 		if ( $this->is_frontend() ) {
 			add_action( 'wp', array( $this, 'prepare_frontend' ), 5 );
 			add_action( 'wp_head', array( $this, 'output_head' ), 1 );
-			add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+			// Priority 20: WP Consent API registers its script at 10, and our
+			// runtime must load after it (issue #1).
+			add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ), 20 );
+			add_filter( 'openpixel_consent_granted', array( $this, 'consent_from_wp_consent_api' ), 5, 2 );
 			add_action( 'wp_footer', array( $this, 'output_footer' ), 30 );
 		}
 
@@ -242,10 +245,14 @@ class OpenPixel_Core {
 			return;
 		}
 
+		// Depend on wp-consent-api when present so window.wp_has_consent exists
+		// before openpixel.js runs; footer script order is otherwise per template.
+		$deps = wp_script_is( 'wp-consent-api', 'registered' ) ? array( 'wp-consent-api' ) : array();
+
 		wp_enqueue_script(
 			'openpixel',
 			OPENPIXEL_PLUGIN_URL . 'assets/js/openpixel.js',
-			array(),
+			$deps,
 			OPENPIXEL_VERSION,
 			true
 		);
@@ -260,6 +267,25 @@ class OpenPixel_Core {
 		}
 
 		wp_add_inline_script( 'openpixel', 'window.openPixelConfig = ' . wp_json_encode( $config ) . ';', 'before' );
+	}
+
+	/**
+	 * Default for the `openpixel_consent_granted` filter: when a consent
+	 * management plugin has registered with the WP Consent API, trust its
+	 * "marketing" category on the server so providers do not print
+	 * consent=false on a page the visitor already opted in to.
+	 *
+	 * Only when a consent type is set: without a CMP, wp_has_consent()
+	 * returns true for everything, which would defeat "Require consent".
+	 */
+	public function consent_from_wp_consent_api( $granted, $provider_id ) {
+		if ( $granted || ! function_exists( 'wp_has_consent' ) || ! function_exists( 'wp_get_consent_type' ) ) {
+			return $granted;
+		}
+		if ( ! wp_get_consent_type() ) {
+			return $granted;
+		}
+		return (bool) wp_has_consent( 'marketing' );
 	}
 
 	public function output_head() {

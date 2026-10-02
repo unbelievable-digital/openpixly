@@ -14,7 +14,7 @@ Built as a small pixel-manager framework: every provider is a single class on th
 | Checkout page | `checkout_started` | `InitiateCheckout` | cart items + total, `event_id = checkout_{cart_hash}` |
 | Order-received page | `order_created` | `Purchase` | order items + total, `event_id = order_{id}` (fires once per order) |
 | Payment complete (server) | `order_created` via Conversions API | `Purchase` via Conversions API | same `order_{id}` → deduplicated against the browser event |
-| New user / customer | `registration_completed` | `CompleteRegistration` | `event_id = reg_{user_id}` |
+| New user / customer | `registration_completed` | `CompleteRegistration` | `event_id = reg_{user_id}`, browser (next page) + server copy via Conversions API |
 
 OpenAI amounts are integers in ISO 4217 minor units; Meta gets decimal `value` + `currency`, `content_ids`, `contents[{id, quantity, item_price}]`, `content_type: product`, `num_items`. Other bus events map to `Lead`, `Schedule`, `Subscribe`, `StartTrial` and `trackCustom`.
 
@@ -55,6 +55,10 @@ Meta: enable the **Meta (Facebook & Instagram Pixel)** section, paste the Pixel 
 
 OpenAI ingests Ads catalogs via the SFTP location shown in Ads Manager > Feeds; download the file and upload it there, or point any fetcher at the private URL.
 
+## Debugging
+
+**Settings > Pixel Manager > Events** — "Enable for 24 hours" records the last 50 events: the request that raised them, each provider's browser payload (`oaiq` / `fbq` args), the Conversions API event object and its result (delivered / attempt n failed + message), and the consent configuration (mode per provider, WP Consent API state). Raw customer data is never stored; `user` / `user_data` are reduced to their key names. Hooks: `openpixel_event_tracked( $event, $persist )`, `openpixel_capi_result( $provider_id, $api_event, $result, $attempt, $retry )`.
+
 ## Content Security Policy
 
 If your site enforces a CSP, add:
@@ -84,6 +88,7 @@ OpenPixel_Event_Bus   normalized events: page_view, view_item, add_to_cart, begi
 ```
 
 - `includes/class-openpixel-event-bus.php` — normalized event model, persistence for events raised on AJAX / redirect requests (WooCommerce session or user transient), draining into the footer or into WooCommerce AJAX fragments.
+- `includes/class-openpixel-event-log.php` — the Events tab ring buffer (option `openpixel_event_log`, 50 entries, auto-off after 24 h).
 - `includes/class-openpixel-provider.php` — abstract provider: declarative settings fields, `render_head` / `render_footer`, `to_browser_payload`, `handle_server_event`.
 - `includes/providers/class-openpixel-provider-openai.php` — the official loader, init, consent, `measure` mapping, `contents[]` building, `<noscript>` image tag, Conversions API event mapping.
 - `includes/class-openpixel-capi-client.php` — shared server-side delivery: Action Scheduler / WP-Cron queue, retries (5xx/408/429), logging.
@@ -104,6 +109,9 @@ openpixel()->get_bus()->track( array(
 
 // Persist for the next page (e.g. inside a form handler that redirects):
 openpixel()->get_bus()->track( array( 'name' => 'schedule', 'value' => 50, 'currency' => 'EUR' ), true );
+
+// Browser + server copy with the same event_id (IP, user agent, URL and attribution cookies filled from the request):
+openpixel()->get_bus()->track( array( 'name' => 'generate_lead', 'event_id' => 'lead_' . $entry_id, 'channel' => 'both', 'user' => array( 'email' => $email ) ), true );
 
 // Server-side only (Conversions API):
 openpixel()->get_bus()->track( array(
@@ -144,6 +152,7 @@ Then register a JS handler: `window.openPixel.register('tiktok', function (p) { 
 - `openpixel_pixel_providers` — register providers.
 - `openpixel_track_event( $event )` — modify or drop (return `null`) any event before providers see it.
 - `openpixel_track_page_view` — return `false` to skip automatic `page_viewed`.
+- `openpixel_server_context( $context, $event )` — request context (IP, UA, URL, attribution cookies) for server copies of `channel => 'both'` events.
 - `openpixel_consent_granted( bool, $provider_id )` — tell the plugin consent is already granted (e.g. from a cookie) so it does not emit `consent(false)`. Wired by default to `wp_has_consent( 'marketing' )` when a consent management plugin has registered with the WP Consent API.
 - `openpixel_script_nonce` — CSP nonce for inline scripts.
 - `openpixel_currency_exponent( int, $currency )` — override minor-unit digits.

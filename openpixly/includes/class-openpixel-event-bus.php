@@ -21,7 +21,7 @@
  *     'plan_id'      => 'pro_monthly',         // subscriptions/trials
  *     'custom_name'  => 'quote_requested',     // for name = custom
  *     'user'         => array( 'email' => ..., 'phone' => ..., ... ), // raw, providers hash
- *     'channel'      => 'browser' | 'server',
+ *     'channel'      => 'browser' | 'server' | 'both',  // both = browser event + server copy with the same event_id
  *     'source'       => 'woocommerce',         // optional; providers with that setting off skip it
  *     'context'      => array( 'ip_address', 'user_agent', 'source_url', 'timestamp_ms',
  *                              + each provider's attribution cookies: 'oppref', 'obref', 'fbp', 'fbc' ),
@@ -76,6 +76,21 @@ class OpenPixel_Event_Bus {
 		if ( ! $event ) {
 			return;
 		}
+
+		if ( 'both' === $event['channel'] ) {
+			// Server copy first, with request context (IP, user agent, URL,
+			// attribution cookies) filled in by core; providers deduplicate
+			// it against the browser event through the shared event_id.
+			$server            = $event;
+			$server['channel'] = 'server';
+			$server['context'] = apply_filters( 'openpixel_server_context', $event['context'], $server );
+			do_action( 'openpixel_event_tracked', $server, false );
+			do_action( 'openpixel_server_event', $server );
+
+			$event['channel'] = 'browser';
+		}
+
+		do_action( 'openpixel_event_tracked', $event, $persist );
 
 		if ( 'server' === $event['channel'] ) {
 			do_action( 'openpixel_server_event', $event );
@@ -201,7 +216,7 @@ class OpenPixel_Event_Bus {
 		$event = wp_parse_args( $event, $defaults );
 		$event['name']     = $name;
 		$event['currency'] = OpenPixel_Money::normalize_currency( $event['currency'] );
-		$event['channel']  = 'server' === $event['channel'] ? 'server' : 'browser';
+		$event['channel']  = in_array( $event['channel'], array( 'server', 'both' ), true ) ? $event['channel'] : 'browser';
 		$event['source']   = sanitize_key( $event['source'] );
 
 		if ( null !== $event['value'] && '' === $event['currency'] ) {

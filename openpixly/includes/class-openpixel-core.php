@@ -23,6 +23,10 @@ class OpenPixel_Core {
 		$this->register_providers();
 
 		add_action( 'openpixel_server_event', array( $this, 'dispatch_server_event' ) );
+		add_filter( 'openpixel_server_context', array( $this, 'fill_server_context' ), 5, 2 );
+
+		$this->event_log = new OpenPixel_Event_Log( $this );
+		$this->event_log->init();
 
 		// Registrations that happen outside WooCommerce (wp-login.php, membership plugins, ...).
 		add_action( 'user_register', array( $this, 'track_registration' ), 20 );
@@ -99,8 +103,66 @@ class OpenPixel_Core {
 	/** @var OpenPixel_Product_Feed */
 	private $feed;
 
+	/** @var OpenPixel_Event_Log */
+	private $event_log;
+
 	public function get_feed() {
 		return $this->feed;
+	}
+
+	public function get_event_log() {
+		return $this->event_log;
+	}
+
+	/**
+	 * Attribution cookies of all enabled providers: context key => cookie name.
+	 */
+	public function get_attribution_cookies() {
+		$cookies = array();
+		foreach ( $this->providers as $provider ) {
+			if ( $provider->is_enabled() ) {
+				$cookies = array_merge( $cookies, $provider->get_attribution_cookies() );
+			}
+		}
+		return $cookies;
+	}
+
+	/**
+	 * Default `openpixel_server_context`: describe the current request for a
+	 * server event raised while it is being handled (registration, lead
+	 * form). Values already present in the context win.
+	 */
+	public function fill_server_context( $context, array $event ) {
+		$context = is_array( $context ) ? $context : array();
+
+		$defaults = array(
+			'timestamp_ms'  => (int) round( microtime( true ) * 1000 ),
+			'action_source' => 'web',
+			'source_url'    => $this->current_url(),
+			'ip_address'    => $this->client_ip(),
+			'user_agent'    => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+		);
+		foreach ( $this->get_attribution_cookies() as $key => $cookie ) {
+			if ( isset( $_COOKIE[ $cookie ] ) ) {
+				$defaults[ $key ] = sanitize_text_field( wp_unslash( $_COOKIE[ $cookie ] ) );
+			}
+		}
+
+		return array_merge( array_filter( $defaults ), array_filter( $context ) );
+	}
+
+	private function current_url() {
+		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
+			return home_url( '/' );
+		}
+		return home_url( sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) );
+	}
+
+	private function client_ip() {
+		if ( class_exists( 'WC_Geolocation' ) ) {
+			return WC_Geolocation::get_ip_address(); // honours trusted proxy headers per WooCommerce settings
+		}
+		return isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 	}
 
 	public function get_bus() {
@@ -124,13 +186,18 @@ class OpenPixel_Core {
 	 * whose setting of that name is on. Providers without such a setting are
 	 * treated as opted in.
 	 */
-	private function provider_wants( OpenPixel_Provider $provider, array $event ) {
+	public function provider_wants( OpenPixel_Provider $provider, array $event ) {
 		if ( empty( $event['source'] ) ) {
 			return true;
 		}
 		return false !== $provider->get_setting( $event['source'], true );
 	}
 
+	/**
+	 * Browser event persisted for the page after the redirect, plus a server
+	 * copy right now: the redirect target is often a page without our
+	 * runtime (login form, external checkout), where the browser event is lost.
+	 */
 	public function track_registration( $user_id ) {
 		$user = get_userdata( $user_id );
 		if ( ! $user ) {
@@ -141,6 +208,7 @@ class OpenPixel_Core {
 			array(
 				'name'     => 'sign_up',
 				'event_id' => 'reg_' . $user_id,
+				'channel'  => 'both',
 				'user'     => array(
 					'email'       => $user->user_email,
 					'external_id' => (string) $user_id,
@@ -175,8 +243,8 @@ class OpenPixel_Core {
 	 * matching and queue page_viewed. Integrations hook `openpixel_prepare`.
 	 */
 	public function prepare_frontend() {
-		if ( is_feed() || is_embed() || is_robots() || is_trackback() ) {
-			return;
+		if ( is_feed() || is_embed() || is_robots() || is_trackback() || ( function_exists( 'is_favicon' ) && is_favicon() ) ) {
+			return; // no page renders here; /favicon.ico in particular is a 404 WordPress answers itself
 		}
 
 		if ( is_user_logged_in() ) {

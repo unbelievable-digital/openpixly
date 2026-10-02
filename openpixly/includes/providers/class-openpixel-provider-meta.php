@@ -114,10 +114,10 @@ class OpenPixel_Provider_Meta extends OpenPixel_Provider {
 			),
 			'capi_enabled'      => array(
 				'section'     => __( 'Conversions API (server-side)', 'openpixly' ),
-				'label'       => __( 'Send orders through the Conversions API', 'openpixly' ),
+				'label'       => __( 'Send conversions through the Conversions API', 'openpixly' ),
 				'type'        => 'checkbox',
 				'default'     => false,
-				'description' => __( 'Sends Purchase from the server when payment completes, using the same event ID as the browser event so Meta deduplicates them.', 'openpixly' ),
+				'description' => __( 'Sends Purchase when payment completes, CompleteRegistration on sign-up and Lead from the server, each with the same event ID as the browser event so Meta deduplicates them.', 'openpixly' ),
 			),
 			'capi_access_token' => array(
 				'label'       => __( 'Conversions API access token', 'openpixly' ),

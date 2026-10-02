@@ -35,6 +35,14 @@ class OpenPixel_OpenAI_CAPI extends OpenPixel_CAPI_Client {
 		return $this->provider->to_capi_event( $event );
 	}
 
+	public function get_provider_id() {
+		return 'openai';
+	}
+
+	public function event_id_of( array $api_event ) {
+		return isset( $api_event['id'] ) ? (string) $api_event['id'] : '';
+	}
+
 	protected function describe( array $api_event ) {
 		return sprintf( '%s (%s)', $api_event['id'], $api_event['type'] );
 	}

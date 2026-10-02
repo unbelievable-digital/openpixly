@@ -4,7 +4,7 @@ Tags: openai, chatgpt ads, meta pixel, conversion tracking, woocommerce
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,7 +47,7 @@ the WP Consent API "marketing" category is detected automatically, on the server
 
 = Conversions API =
 
-Enable it and paste the API key from the Conversions tab of Ads Manager (for
+Orders, registrations and leads are sent from the server. Enable it and paste the API key from the Conversions tab of Ads Manager (for
 Meta: the access token from Events Manager). Orders are delivered
 asynchronously with retries and logged under WooCommerce > Status > Logs
 (source: openpixly). The OpenAI "Send test event" button validates your
@@ -73,6 +73,13 @@ own private URL. Paste it in Commerce Manager > Catalog > Data sources > Data
 feed > Scheduled feed. Item ids equal the pixel's content_ids, which is what
 Advantage+ catalog ads need.
 
+= Debugging =
+
+The Events tab records, for 24 hours after you enable it, every event the
+plugin tracks: the page or request that raised it, the exact payload each
+pixel received and whether the Conversions API accepted it. Customer data is
+reduced to the names of the fields present.
+
 = Extensible =
 
 The plugin is a small pixel manager: integrations emit normalized events on
@@ -94,7 +101,7 @@ This plugin is an integration with OpenAI's ChatGPT Ads measurement services and
 
 **OpenAI image tag (no-JavaScript fallback)** — https://bzr.openai.com/v1/sdk/events — when enabled, a 1x1 image records a page view for visitors without JavaScript. It carries only the Pixel ID and event name.
 
-**OpenAI Conversions API (server-to-server)** — https://bzr.openai.com/v1/events — only when enabled with your Conversions API key. When an order is paid, the plugin sends the order id, total, currency and line items (product ids, names, quantities, amounts, variant attributes), the SHA-256 hashed billing email, phone, first and last name, the billing country, city, region and postal code, the customer's IP address and user agent, and the attribution cookie values captured at checkout. The admin "Send test event" button sends a synthetic event with `validate_only` set, which OpenAI validates but does not store.
+**OpenAI Conversions API (server-to-server)** — https://bzr.openai.com/v1/events — only when enabled with your Conversions API key. When a user registers, the plugin sends the hashed email and name, the user id (hashed), IP address, user agent and attribution cookie values. When an order is paid, the plugin sends the order id, total, currency and line items (product ids, names, quantities, amounts, variant attributes), the SHA-256 hashed billing email, phone, first and last name, the billing country, city, region and postal code, the customer's IP address and user agent, and the attribution cookie values captured at checkout. The admin "Send test event" button sends a synthetic event with `validate_only` set, which OpenAI validates but does not store.
 
 The product feed feature does not contact OpenAI or Meta by itself; it generates files on your server that you choose to give to them.
 
@@ -104,7 +111,7 @@ Service provider: OpenAI, L.L.C. Terms of use: https://openai.com/policies/terms
 
 **Meta image tag (no-JavaScript fallback)** — https://www.facebook.com/tr — when enabled, a 1x1 image records a PageView for visitors without JavaScript. It carries only the Pixel ID and event name.
 
-**Meta Conversions API (server-to-server)** — https://graph.facebook.com/ — only when enabled with your access token. When an order is paid, the plugin sends the order id, total, currency and line items (product ids, quantities, unit prices), the SHA-256 hashed billing email, phone, first and last name, city, region, postal code, country and customer id, the customer's IP address and user agent, and the `_fbp` / `_fbc` cookie values captured at checkout. The admin "Send test event" button sends a synthetic event carrying your test event code, which Meta shows under Test events and does not count as a conversion.
+**Meta Conversions API (server-to-server)** — https://graph.facebook.com/ — only when enabled with your access token. When a user registers, the plugin sends the hashed email, name and user id, IP address, user agent and `_fbp` / `_fbc` values. When an order is paid, the plugin sends the order id, total, currency and line items (product ids, quantities, unit prices), the SHA-256 hashed billing email, phone, first and last name, city, region, postal code, country and customer id, the customer's IP address and user agent, and the `_fbp` / `_fbc` cookie values captured at checkout. The admin "Send test event" button sends a synthetic event carrying your test event code, which Meta shows under Test events and does not count as a conversion.
 
 Service provider: Meta Platforms, Inc. / Meta Platforms Ireland Ltd. Meta Business Tools terms: https://www.facebook.com/legal/terms/businesstools — Privacy policy: https://www.facebook.com/privacy/policy/ — Developer documentation: https://developers.facebook.com/docs/meta-pixel
 
@@ -126,6 +133,12 @@ and `img-src https://bzr.openai.com`. For the Meta pixel add `script-src https:/
 Yes. The plugin only uses the WooCommerce CRUD order API and declares HPOS compatibility.
 
 == Changelog ==
+
+= 1.4.0 =
+* New: Events tab (Settings > Pixel Manager > Events): a debugger that records the last 50 events for 24 hours with the request that raised them, each provider's payload and the Conversions API result, plus a summary of the consent configuration. Customer data is not stored.
+* New: registration_completed / CompleteRegistration is also sent from the server through the Conversions API with the same event ID as the browser event, so sign-ups on redirecting flows are no longer lost.
+* New: `channel => 'both'` for custom events: browser event plus a server copy whose IP, user agent, URL and attribution cookies are filled from the current request.
+* Fix: no page_view was built for /favicon.ico requests.
 
 = 1.3.1 =
 * Fix: with "Require consent first" and the WP Consent API, consent granted on an earlier page was lost on templates where openpixel.js loaded before wp-consent-api.js, so no events fired (GitHub #1). The runtime now depends on the wp-consent-api script, re-checks consent after the DOM and page load, and the server no longer prints consent = false when the consent management plugin already reports "marketing" as allowed.

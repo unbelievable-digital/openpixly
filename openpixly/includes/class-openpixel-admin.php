@@ -5,6 +5,7 @@
  * Tab "Pixels": every registered provider's declarative fields, so a new
  * provider gets a settings section without touching this file.
  * Tab "Product feed": WooCommerce catalog feed for OpenAI Ads and the Meta catalog.
+ * Tab "Events": debugger showing the last events, payloads and Conversions API results.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -29,6 +30,7 @@ class OpenPixel_Admin {
 		add_action( 'admin_post_openpixel_capi_test', array( $this, 'handle_capi_test' ) );
 		add_action( 'admin_post_openpixel_feed_rebuild', array( $this, 'handle_feed_rebuild' ) );
 		add_action( 'admin_post_openpixel_feed_rotate', array( $this, 'handle_feed_rotate' ) );
+		add_action( 'admin_post_openpixel_event_log', array( $this, 'handle_event_log' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( OPENPIXEL_PLUGIN_FILE ), array( $this, 'plugin_action_links' ) );
 	}
 
@@ -184,6 +186,34 @@ class OpenPixel_Admin {
 		exit;
 	}
 
+	public function handle_event_log() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Not allowed.', 'openpixly' ) );
+		}
+		check_admin_referer( 'openpixel_event_log' );
+
+		$log = $this->core->get_event_log();
+		$do  = isset( $_POST['do'] ) ? sanitize_key( wp_unslash( $_POST['do'] ) ) : '';
+
+		switch ( $do ) {
+			case 'enable':
+				$log->enable();
+				$this->notice( 'success', __( 'Event debugger enabled for 24 hours. Browse the site (not as an administrator if "Do not track administrators" is on) and reload this tab.', 'openpixly' ) );
+				break;
+			case 'disable':
+				$log->disable();
+				$this->notice( 'success', __( 'Event debugger disabled.', 'openpixly' ) );
+				break;
+			case 'clear':
+				$log->clear();
+				$this->notice( 'success', __( 'Event log cleared.', 'openpixly' ) );
+				break;
+		}
+
+		wp_safe_redirect( $this->page_url( 'events' ) );
+		exit;
+	}
+
 	/* ---------------------------------------------------------------------
 	 * Page
 	 * ------------------------------------------------------------------ */
@@ -194,7 +224,7 @@ class OpenPixel_Admin {
 		}
 
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'pixels'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( ! in_array( $tab, array( 'pixels', 'feed' ), true ) ) {
+		if ( ! in_array( $tab, array( 'pixels', 'feed', 'events' ), true ) ) {
 			$tab = 'pixels';
 		}
 
@@ -214,10 +244,13 @@ class OpenPixel_Admin {
 			<nav class="nav-tab-wrapper">
 				<a href="<?php echo esc_url( $this->page_url() ); ?>" class="nav-tab <?php echo 'pixels' === $tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Pixels', 'openpixly' ); ?></a>
 				<a href="<?php echo esc_url( $this->page_url( 'feed' ) ); ?>" class="nav-tab <?php echo 'feed' === $tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Product feed', 'openpixly' ); ?></a>
+				<a href="<?php echo esc_url( $this->page_url( 'events' ) ); ?>" class="nav-tab <?php echo 'events' === $tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Events', 'openpixly' ); ?></a>
 			</nav>
 
 			<?php if ( 'feed' === $tab ) : ?>
 				<?php $this->render_feed_tab(); ?>
+			<?php elseif ( 'events' === $tab ) : ?>
+				<?php $this->render_events_tab(); ?>
 			<?php else : ?>
 				<form method="post" action="options.php">
 					<?php settings_fields( 'openpixel_settings_group' ); ?>
@@ -489,6 +522,153 @@ class OpenPixel_Admin {
 			<li><?php esc_html_e( 'Required fields: item_id, title, description, url, brand, seller_name, image_url, availability, price. Products missing brand, price or image are skipped and counted.', 'openpixly' ); ?></li>
 			<li><?php esc_html_e( 'Prices use your tax display settings, formatted as "79.99 USD". Sale prices are included when active.', 'openpixly' ); ?></li>
 			<li><?php esc_html_e( 'Product IDs match the ids sent in pixel events, so product-set filters and product insights line up.', 'openpixly' ); ?></li>
+		</ul>
+		<?php
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Events tab (debugger)
+	 * ------------------------------------------------------------------ */
+
+	private function render_events_tab() {
+		$log     = $this->core->get_event_log();
+		$enabled = $log->is_enabled();
+		$entries = $log->get_entries();
+		?>
+		<p><?php esc_html_e( 'Shows the last 50 events the plugin tracked: which page or request raised them, the payload each provider received and the Conversions API result. Customer data is not stored, only the names of the fields that were present.', 'openpixly' ); ?></p>
+
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="openpixel-inline-form">
+			<input type="hidden" name="action" value="openpixel_event_log" />
+			<?php wp_nonce_field( 'openpixel_event_log' ); ?>
+			<?php if ( $enabled ) : ?>
+				<p>
+					<strong><?php esc_html_e( 'Recording', 'openpixly' ); ?></strong>
+					<?php
+					/* translators: %s: date and time */
+					printf( esc_html__( 'until %s.', 'openpixly' ), esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $log->enabled_until() ) ) );
+					?>
+					<button type="submit" name="do" value="disable" class="button"><?php esc_html_e( 'Stop', 'openpixly' ); ?></button>
+					<button type="submit" name="do" value="clear" class="button"><?php esc_html_e( 'Clear log', 'openpixly' ); ?></button>
+				</p>
+			<?php else : ?>
+				<p>
+					<button type="submit" name="do" value="enable" class="button button-primary"><?php esc_html_e( 'Enable for 24 hours', 'openpixly' ); ?></button>
+					<?php if ( $entries ) : ?>
+						<button type="submit" name="do" value="clear" class="button"><?php esc_html_e( 'Clear log', 'openpixly' ); ?></button>
+					<?php endif; ?>
+				</p>
+			<?php endif; ?>
+		</form>
+
+		<?php $this->render_consent_status(); ?>
+
+		<?php if ( ! $entries ) : ?>
+			<p><em><?php echo $enabled ? esc_html__( 'No events recorded yet. Open the shop in a browser where the pixel renders and reload this tab.', 'openpixly' ) : esc_html__( 'No events recorded.', 'openpixly' ); ?></em></p>
+			<?php
+			return;
+		endif;
+		?>
+
+		<table class="widefat striped openpixel-events">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'Time', 'openpixly' ); ?></th>
+					<th><?php esc_html_e( 'Event', 'openpixly' ); ?></th>
+					<th><?php esc_html_e( 'Event ID', 'openpixly' ); ?></th>
+					<th><?php esc_html_e( 'Channel', 'openpixly' ); ?></th>
+					<th><?php esc_html_e( 'Request', 'openpixly' ); ?></th>
+					<th><?php esc_html_e( 'Value', 'openpixly' ); ?></th>
+					<th><?php esc_html_e( 'Providers', 'openpixly' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+			<?php foreach ( $entries as $entry ) : ?>
+				<tr>
+					<td><?php echo esc_html( wp_date( 'M j H:i:s', (int) $entry['time'] ) ); ?></td>
+					<td>
+						<code><?php echo esc_html( $entry['name'] . ( $entry['custom'] ? ':' . $entry['custom'] : '' ) ); ?></code>
+						<?php if ( $entry['source'] ) : ?><br /><small><?php echo esc_html( $entry['source'] ); ?></small><?php endif; ?>
+					</td>
+					<td><code><?php echo esc_html( $entry['event_id'] ? $entry['event_id'] : '—' ); ?></code></td>
+					<td>
+						<?php echo esc_html( $entry['channel'] ); ?>
+						<?php if ( $entry['persist'] ) : ?><br /><small><?php esc_html_e( 'persisted for next page', 'openpixly' ); ?></small><?php endif; ?>
+					</td>
+					<td><code><?php echo esc_html( $entry['request'] ); ?></code></td>
+					<td>
+						<?php echo null !== $entry['value'] ? esc_html( $entry['value'] . ' ' . $entry['currency'] ) : '—'; ?>
+						<?php if ( $entry['items'] ) : ?><br /><small><?php echo esc_html( sprintf( /* translators: %d: number of items */ _n( '%d item', '%d items', $entry['items'], 'openpixly' ), $entry['items'] ) ); ?></small><?php endif; ?>
+						<?php if ( $entry['user'] ) : ?><br /><small><?php echo esc_html( 'user: ' . implode( ', ', $entry['user'] ) ); ?></small><?php endif; ?>
+					</td>
+					<td>
+						<?php foreach ( $entry['payloads'] as $provider_id => $payload ) : ?>
+							<?php $this->render_event_provider( $provider_id, $payload, isset( $entry['results'][ $provider_id ] ) ? $entry['results'][ $provider_id ] : null ); ?>
+						<?php endforeach; ?>
+					</td>
+				</tr>
+			<?php endforeach; ?>
+			</tbody>
+		</table>
+		<?php
+	}
+
+	private function render_event_provider( $provider_id, $payload, $result ) {
+		$provider = $this->core->get_provider( $provider_id );
+		$label    = $provider ? $provider->get_label() : $provider_id;
+
+		if ( $result ) {
+			$status = $result['ok']
+				? '✅ ' . __( 'delivered', 'openpixly' )
+				: ( $result['retry'] ? '🔁 ' : '❌ ' ) . sprintf( /* translators: %d: attempt number */ __( 'attempt %d failed', 'openpixly' ), $result['attempt'] );
+			$detail = $result['payload'];
+		} elseif ( is_string( $payload ) ) {
+			$status = $payload;
+			$detail = null;
+		} else {
+			$status = '➡️ ' . __( 'browser', 'openpixly' );
+			$detail = $payload;
+		}
+		?>
+		<details class="openpixel-event-detail">
+			<summary><strong><?php echo esc_html( $label ); ?></strong>: <?php echo esc_html( $status ); ?></summary>
+			<?php if ( $result && ! $result['ok'] ) : ?>
+				<p class="openpixel-error"><?php echo esc_html( $result['message'] ); ?></p>
+			<?php endif; ?>
+			<?php if ( null !== $detail ) : ?>
+				<pre><?php echo esc_html( wp_json_encode( $detail, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ); ?></pre>
+			<?php endif; ?>
+		</details>
+		<?php
+	}
+
+	/** Consent facts that explain "no events": mode per provider and WP Consent API state. */
+	private function render_consent_status() {
+		$api  = function_exists( 'wp_has_consent' );
+		$type = $api && function_exists( 'wp_get_consent_type' ) ? wp_get_consent_type() : '';
+		?>
+		<h3><?php esc_html_e( 'Consent', 'openpixly' ); ?></h3>
+		<ul class="openpixel-status">
+			<?php foreach ( $this->core->get_providers() as $provider ) : ?>
+				<?php if ( ! $provider->is_enabled() ) { continue; } ?>
+				<li>
+					<?php echo esc_html( $provider->get_label() ); ?>:
+					<?php echo 'require' === $provider->get_setting( 'consent_mode' ) ? esc_html__( 'requires consent first (events wait for the banner).', 'openpixly' ) : esc_html__( 'measures immediately.', 'openpixly' ); ?>
+					<?php if ( $provider->get_setting( 'exclude_admins' ) ) : ?><?php esc_html_e( 'Administrators are not tracked.', 'openpixly' ); ?><?php endif; ?>
+				</li>
+			<?php endforeach; ?>
+			<li>
+				<?php esc_html_e( 'WP Consent API:', 'openpixly' ); ?>
+				<?php
+				if ( ! $api ) {
+					esc_html_e( 'not installed. Consent is granted by your banner calling window.openPixel.grantConsent().', 'openpixly' );
+				} elseif ( ! $type ) {
+					esc_html_e( 'installed, but no consent management plugin has registered a consent type, so it is ignored.', 'openpixly' );
+				} else {
+					/* translators: %s: consent type, e.g. optin */
+					printf( esc_html__( 'active, consent type "%s". The "marketing" category is checked on the server and in the browser.', 'openpixly' ), esc_html( $type ) );
+				}
+				?>
+			</li>
 		</ul>
 		<?php
 	}

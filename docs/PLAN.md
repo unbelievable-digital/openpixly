@@ -59,7 +59,7 @@ Events that happen on requests that render no page (AJAX add-to-cart, registrati
 - [x] `order_created` sent on `woocommerce_payment_complete` / first `processing|completed` status, same `order_{id}` id, `action_source=web`, `source_url` = order-received URL, `user` = hashed billing + IP + UA + `obref`, `contents[]` with `group_id` / `variant_dict`.
 - [x] Async delivery through Action Scheduler (ships with WooCommerce) with retry; WC logger output under source `openpixly`.
 - [x] Admin "Send test event" using `validate_only: true`.
-- [ ] `registration_completed` and `lead_created` server-side where a browser event may be lost.
+- [x] `registration_completed` server-side (1.4.0, `channel => 'both'` on the bus); `lead_created` the same way once a form integration exists.
 - [ ] Verify on a real store with a real Pixel ID + API key (debug mode + WooCommerce logs).
 
 ## Phase 2b — Product feed (shipped in 1.2.0)
@@ -93,7 +93,8 @@ Source: https://developers.openai.com/ads/product-feeds + https://developers.ope
 - [ ] WooCommerce Subscriptions → `subscription_created` / `trial_started` (`plan_enrollment`, `plan_id` = product id).
 - [ ] Lead forms (Contact Form 7, WPForms, Gravity Forms) → `lead_created`.
 - [ ] WP Consent API / common CMP integrations for consent mode.
-- [ ] Per-event enable/disable UI and event debugger panel.
+- [x] Event debugger panel (1.4.0, Events tab).
+- [ ] Per-event enable/disable UI.
 
 ## Non-goals
 

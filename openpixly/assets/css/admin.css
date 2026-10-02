@@ -5,3 +5,12 @@
 .openpixel-wrap textarea.code {
 	font-family: Consolas, Monaco, monospace;
 }
+
+.openpixel-events td { vertical-align: top; }
+.openpixel-events code { font-size: 12px; }
+.openpixel-event-detail { margin: 0 0 4px; }
+.openpixel-event-detail summary { cursor: pointer; }
+.openpixel-event-detail pre { max-width: 520px; max-height: 260px; overflow: auto; background: #f6f7f7; padding: 8px; font-size: 11px; margin: 4px 0; }
+.openpixel-event-detail .openpixel-error { color: #b32d2e; margin: 4px 0; }
+.openpixel-events th:last-child, .openpixel-events td:last-child { width: 30%; }
+.openpixel-events th:nth-child(3) { width: 18%; }

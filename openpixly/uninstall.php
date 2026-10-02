@@ -11,6 +11,8 @@ delete_option( 'openpixel_settings' );
 delete_option( 'openpixel_feed_settings' );
 delete_option( 'openpixel_feed_status' );
 delete_option( 'openpixel_feed_schedule_current' );
+delete_option( 'openpixel_event_log' );
+delete_option( 'openpixel_event_log_until' );
 
 // Generated feed files.
 $openpixel_uploads = wp_upload_dir();

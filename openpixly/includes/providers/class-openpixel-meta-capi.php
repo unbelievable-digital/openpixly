@@ -39,6 +39,14 @@ class OpenPixel_Meta_CAPI extends OpenPixel_CAPI_Client {
 		return $this->provider->to_capi_event( $event );
 	}
 
+	public function get_provider_id() {
+		return 'meta';
+	}
+
+	public function event_id_of( array $api_event ) {
+		return isset( $api_event['event_id'] ) ? (string) $api_event['event_id'] : '';
+	}
+
 	protected function describe( array $api_event ) {
 		return sprintf( '%s (Meta %s)', $api_event['event_id'], $api_event['event_name'] );
 	}

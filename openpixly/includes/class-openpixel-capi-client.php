@@ -46,6 +46,12 @@ abstract class OpenPixel_CAPI_Client {
 	/** Short "id (type)" label for log lines. */
 	abstract protected function describe( array $api_event );
 
+	/** Provider id this client delivers for (debugger / hooks). */
+	abstract public function get_provider_id();
+
+	/** Bus event_id of an API event object (debugger matches it to the tracked event). */
+	abstract public function event_id_of( array $api_event );
+
 	/** Called after a successful delivery. */
 	protected function delivered( array $api_event, $result ) {}
 
@@ -98,13 +104,16 @@ abstract class OpenPixel_CAPI_Client {
 				'error'
 			);
 
-			if ( $attempt < self::MAX_ATTEMPTS && $this->is_retryable( $result ) ) {
+			$retry = $attempt < self::MAX_ATTEMPTS && $this->is_retryable( $result );
+			if ( $retry ) {
 				$this->schedule( $api_event, $attempt + 1, 5 * MINUTE_IN_SECONDS * $attempt );
 			}
+			do_action( 'openpixel_capi_result', $this->get_provider_id(), $api_event, $result, $attempt, $retry );
 			return;
 		}
 
 		$this->log( sprintf( 'Event %s delivered.', $this->describe( $api_event ) ), 'info' );
+		do_action( 'openpixel_capi_result', $this->get_provider_id(), $api_event, $result, $attempt, false );
 		$this->delivered( $api_event, $result );
 	}
 

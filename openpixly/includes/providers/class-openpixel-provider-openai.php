@@ -115,10 +115,10 @@ class OpenPixel_Provider_OpenAI extends OpenPixel_Provider {
 			),
 			'capi_enabled'      => array(
 				'section'     => __( 'Conversions API (server-side)', 'openpixly' ),
-				'label'       => __( 'Send orders through the Conversions API', 'openpixly' ),
+				'label'       => __( 'Send conversions through the Conversions API', 'openpixly' ),
 				'type'        => 'checkbox',
 				'default'     => false,
-				'description' => __( 'Sends order_created from the server when payment completes, using the same event ID as the browser event so OpenAI deduplicates them. More reliable than the browser pixel alone.', 'openpixly' ),
+				'description' => __( 'Sends order_created when payment completes, registration_completed on sign-up and lead_created from the server, each with the same event ID as the browser event so OpenAI deduplicates them. More reliable than the browser pixel alone.', 'openpixly' ),
 			),
 			'capi_api_key'      => array(
 				'label'       => __( 'Conversions API key', 'openpixly' ),

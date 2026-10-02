@@ -262,25 +262,12 @@ class OpenPixel_Integration_WooCommerce {
 			return;
 		}
 
-		foreach ( $this->attribution_cookies() as $key => $cookie ) {
+		foreach ( $this->core->get_attribution_cookies() as $key => $cookie ) {
 			$value = isset( $_COOKIE[ $cookie ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $cookie ] ) ) : '';
 			if ( '' !== $value ) {
 				$order->update_meta_data( self::META_ATTRIBUTION . $key, $value );
 			}
 		}
-	}
-
-	/**
-	 * Attribution cookies of all enabled providers: context key => cookie name.
-	 */
-	private function attribution_cookies() {
-		$cookies = array();
-		foreach ( $this->core->get_providers() as $provider ) {
-			if ( $provider->is_enabled() ) {
-				$cookies = array_merge( $cookies, $provider->get_attribution_cookies() );
-			}
-		}
-		return $cookies;
 	}
 
 	public function track_server_purchase( $order_id ) {
@@ -292,7 +279,7 @@ class OpenPixel_Integration_WooCommerce {
 		$paid_at = $order->get_date_paid() ? $order->get_date_paid() : $order->get_date_created();
 
 		$attribution = array();
-		foreach ( array_keys( $this->attribution_cookies() ) as $key ) {
+		foreach ( array_keys( $this->core->get_attribution_cookies() ) as $key ) {
 			$attribution[ $key ] = $order->get_meta( self::META_ATTRIBUTION . $key );
 		}
 

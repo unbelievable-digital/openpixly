@@ -166,6 +166,61 @@ class OpenPixel_Hash {
 	}
 
 	/**
+	 * Google enhanced conversions `user_data`, pre-hashed variant:
+	 * https://support.google.com/google-ads/answer/13258081
+	 *
+	 *  sha256_email_address  trim, lowercase, dots before @ removed for gmail / googlemail
+	 *  sha256_phone_number   E.164 (+ and 10–14 digits)
+	 *  address.sha256_first_name / sha256_last_name  trim, lowercase
+	 *  address.city / region / postal_code / country  plain, country ISO 3166-1 alpha-2
+	 *
+	 * @param array $raw Same keys as pixel_user().
+	 * @return array
+	 */
+	public static function google_user( array $raw ) {
+		$user = array();
+
+		$email = isset( $raw['email'] ) ? strtolower( trim( (string) $raw['email'] ) ) : '';
+		if ( $email && is_email( $email ) ) {
+			list( $local, $domain ) = explode( '@', $email, 2 );
+			if ( in_array( $domain, array( 'gmail.com', 'googlemail.com' ), true ) ) {
+				$local = str_replace( '.', '', $local );
+			}
+			$user['sha256_email_address'] = self::sha256( $local . '@' . $domain );
+		}
+
+		$digits = isset( $raw['phone'] ) ? preg_replace( '/\D/', '', (string) $raw['phone'] ) : '';
+		$digits = preg_replace( '/^00/', '', $digits );
+		if ( strlen( $digits ) >= 10 && strlen( $digits ) <= 14 ) {
+			$user['sha256_phone_number'] = self::sha256( '+' . $digits );
+		}
+
+		$address = array();
+		foreach ( array( 'first_name' => 'sha256_first_name', 'last_name' => 'sha256_last_name' ) as $key => $to ) {
+			if ( ! empty( $raw[ $key ] ) ) {
+				$value = trim( (string) $raw[ $key ] );
+				$value = function_exists( 'mb_strtolower' ) ? mb_strtolower( $value, 'UTF-8' ) : strtolower( $value );
+				if ( '' !== $value ) {
+					$address[ $to ] = self::sha256( $value );
+				}
+			}
+		}
+		foreach ( array( 'city', 'region', 'postal_code' ) as $key ) {
+			if ( ! empty( $raw[ $key ] ) ) {
+				$address[ $key ] = mb_substr( trim( (string) $raw[ $key ] ), 0, 128 );
+			}
+		}
+		if ( ! empty( $raw['country'] ) && preg_match( '/^[A-Za-z]{2}$/', $raw['country'] ) ) {
+			$address['country'] = strtoupper( $raw['country'] );
+		}
+		if ( $address ) {
+			$user['address'] = $address;
+		}
+
+		return $user;
+	}
+
+	/**
 	 * Build the Conversions-API-shaped `user` object (plural list keys).
 	 *
 	 * @param array $raw Same keys as pixel_user() plus: ip_address, user_agent, obref.

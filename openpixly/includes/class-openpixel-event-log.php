@@ -81,8 +81,14 @@ class OpenPixel_Event_Log {
 				$payloads[ $id ] = $provider->get_setting( 'capi_enabled' ) ? 'queued' : 'capi off';
 				continue;
 			}
-			$payload         = $provider->to_browser_payload( $event );
-			$payloads[ $id ] = $payload ? $payload['args'] : 'skipped';
+			$payload = $provider->to_browser_payload( $event );
+			if ( ! $payload ) {
+				$payloads[ $id ] = 'skipped';
+			} elseif ( isset( $payload['provider'] ) ) {
+				$payloads[ $id ] = $payload['args'];
+			} else {
+				$payloads[ $id ] = wp_list_pluck( $payload, 'args' );
+			}
 		}
 
 		$entry = array(

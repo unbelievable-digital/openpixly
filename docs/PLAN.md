@@ -59,7 +59,7 @@ Events that happen on requests that render no page (AJAX add-to-cart, registrati
 - [x] `order_created` sent on `woocommerce_payment_complete` / first `processing|completed` status, same `order_{id}` id, `action_source=web`, `source_url` = order-received URL, `user` = hashed billing + IP + UA + `obref`, `contents[]` with `group_id` / `variant_dict`.
 - [x] Async delivery through Action Scheduler (ships with WooCommerce) with retry; WC logger output under source `openpixly`.
 - [x] Admin "Send test event" using `validate_only: true`.
-- [x] `registration_completed` server-side (1.4.0, `channel => 'both'` on the bus); `lead_created` the same way once a form integration exists.
+- [x] `registration_completed` (1.4.0) and `lead_created` (1.5.0) server-side via `channel => 'both'`.
 - [ ] Verify on a real store with a real Pixel ID + API key (debug mode + WooCommerce logs).
 
 ## Phase 2b — Product feed (shipped in 1.2.0)
@@ -89,9 +89,10 @@ Source: https://developers.openai.com/ads/product-feeds + https://developers.ope
 - [x] Meta Pixel + Conversions API provider (1.3.0): fbq loader, hashed advanced matching, consent revoke/grant, `eventID` dedup with server `Purchase`, `_fbp`/`_fbc` captured at checkout, test event code.
 - [x] Meta catalog feed (1.3.0): second CSV in the same build pass, `/openpixly-feed/<token>/meta-catalog.csv`, ids = pixel `content_ids`.
 - [ ] Verify Meta on a real store: Events Manager > Test events (browser + server dedup), catalog scheduled-feed fetch, catalog match rate.
-- [ ] Google Ads / GA4 provider, TikTok — each a single class on the bus.
+- [x] Google provider (1.5.0): gtag loader, Consent Mode v2, GA4 ecommerce events, Ads conversion labels per event, enhanced conversions. No server channel (offline conversion import needs OAuth).
+- [ ] TikTok provider.
 - [ ] WooCommerce Subscriptions → `subscription_created` / `trial_started` (`plan_enrollment`, `plan_id` = product id).
-- [ ] Lead forms (Contact Form 7, WPForms, Gravity Forms) → `lead_created`.
+- [x] Lead forms (1.5.0): Contact Form 7, WPForms, Gravity Forms → `generate_lead`, channel both, payloads inside the AJAX response.
 - [ ] WP Consent API / common CMP integrations for consent mode.
 - [x] Event debugger panel (1.4.0, Events tab).
 - [ ] Per-event enable/disable UI.

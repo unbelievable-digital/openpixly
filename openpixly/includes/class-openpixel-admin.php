@@ -421,6 +421,8 @@ class OpenPixel_Admin {
 			<li><?php echo $as_active ? '✅' : '➖'; ?> <?php esc_html_e( 'Action Scheduler', 'openpixly' ); ?>: <?php echo $as_active ? esc_html__( 'available — server-side events are queued with retries.', 'openpixly' ) : esc_html__( 'not available — WP-Cron is used instead.', 'openpixly' ); ?></li>
 			<li>ℹ️ <?php esc_html_e( 'If your site enforces a Content Security Policy, allow script-src https://bzrcdn.openai.com, connect-src https://bzr.openai.com https://bzrcdn.openai.com and img-src https://bzr.openai.com.', 'openpixly' ); ?></li>
 			<li>ℹ️ <?php esc_html_e( 'For the Meta pixel also allow script-src https://connect.facebook.net and connect-src / img-src https://www.facebook.com.', 'openpixly' ); ?></li>
+			<li>ℹ️ <?php esc_html_e( 'For the Google tag also allow script-src https://www.googletagmanager.com and connect-src / img-src https://www.google-analytics.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://www.google.com.', 'openpixly' ); ?></li>
+			<li><?php echo ( class_exists( 'WPCF7' ) || function_exists( 'wpforms' ) || class_exists( 'GFForms' ) ) ? '✅' : '➖'; ?> <?php esc_html_e( 'Lead forms', 'openpixly' ); ?>: <?php echo esc_html( implode( ', ', array_filter( array( class_exists( 'WPCF7' ) ? 'Contact Form 7' : '', function_exists( 'wpforms' ) ? 'WPForms' : '', class_exists( 'GFForms' ) ? 'Gravity Forms' : '' ) ) ) ?: __( 'none detected (Contact Form 7, WPForms, Gravity Forms are supported).', 'openpixly' ) ); ?></li>
 		</ul>
 		<?php
 	}

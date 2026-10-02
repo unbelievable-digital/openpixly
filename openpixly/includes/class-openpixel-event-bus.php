@@ -49,7 +49,11 @@ class OpenPixel_Event_Bus {
 	);
 
 	const SESSION_KEY   = 'openpixel_pending_events';
+	const COOKIE        = 'openpixel_pending';
 	const TRANSIENT_TTL = 15 * MINUTE_IN_SECONDS;
+
+	/** @var string Transient key behind the guest cookie, once known in this request. */
+	private $cookie_key = '';
 
 	/** @var array Events queued during this request for the browser. */
 	private $browser_queue = array();
@@ -157,7 +161,37 @@ class OpenPixel_Event_Bus {
 			}
 		}
 
+		$key = $this->cookie_key();
+		if ( $key ) {
+			$stored = get_transient( $key );
+			if ( is_array( $stored ) && $stored ) {
+				$events = array_merge( $events, $stored );
+				delete_transient( $key );
+			}
+		}
+
 		return $events;
+	}
+
+	/**
+	 * Guests without a WooCommerce session (lead forms on a plain site) get
+	 * a short-lived cookie pointing at a transient. Created on demand.
+	 */
+	private function cookie_key( $create = false ) {
+		if ( $this->cookie_key ) {
+			return $this->cookie_key;
+		}
+		$id = isset( $_COOKIE[ self::COOKIE ] ) ? preg_replace( '/[^a-f0-9]/', '', sanitize_text_field( wp_unslash( $_COOKIE[ self::COOKIE ] ) ) ) : '';
+		if ( ! $id && $create && ! headers_sent() ) {
+			$id = wp_generate_password( 32, false, false );
+			$id = strtolower( preg_replace( '/[^a-zA-Z0-9]/', '', $id ) );
+			$id = substr( hash( 'sha256', $id . wp_salt() ), 0, 32 );
+			setcookie( self::COOKIE, $id, time() + self::TRANSIENT_TTL, COOKIEPATH ? COOKIEPATH : '/', COOKIE_DOMAIN, is_ssl(), true );
+		}
+		if ( $id ) {
+			$this->cookie_key = self::SESSION_KEY . '_c_' . substr( $id, 0, 32 );
+		}
+		return $this->cookie_key;
 	}
 
 	private function persist( array $event ) {
@@ -173,8 +207,8 @@ class OpenPixel_Event_Bus {
 		}
 
 		$user_id = ! empty( $event['_user_id'] ) ? (int) $event['_user_id'] : get_current_user_id();
-		if ( $user_id ) {
-			$key      = self::SESSION_KEY . '_user_' . $user_id;
+		$key     = $user_id ? self::SESSION_KEY . '_user_' . $user_id : $this->cookie_key( true );
+		if ( $key ) {
 			$stored   = get_transient( $key );
 			$stored   = is_array( $stored ) ? $stored : array();
 			$stored[] = $event;

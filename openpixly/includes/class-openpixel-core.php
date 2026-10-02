@@ -46,6 +46,9 @@ class OpenPixel_Core {
 			$wc->init();
 		}
 
+		$forms = new OpenPixel_Integration_Forms( $this );
+		$forms->init();
+
 		$this->feed = new OpenPixel_Product_Feed();
 		$this->feed->init();
 
@@ -57,10 +60,10 @@ class OpenPixel_Core {
 	 * ------------------------------------------------------------------ */
 
 	private function register_providers() {
-		$providers = array( new OpenPixel_Provider_OpenAI(), new OpenPixel_Provider_Meta() );
+		$providers = array( new OpenPixel_Provider_OpenAI(), new OpenPixel_Provider_Meta(), new OpenPixel_Provider_Google() );
 
 		/**
-		 * Register additional pixel providers (Google, TikTok, ...).
+		 * Register additional pixel providers (TikTok, ...).
 		 *
 		 * @param OpenPixel_Provider[] $providers
 		 */
@@ -416,8 +419,12 @@ class OpenPixel_Core {
 					continue;
 				}
 				$payload = $provider->to_browser_payload( $event );
-				if ( $payload ) {
-					$payloads[] = $payload;
+				if ( ! $payload ) {
+					continue;
+				}
+				// A provider may answer with several calls (GA4 event + Ads conversion).
+				foreach ( isset( $payload['provider'] ) ? array( $payload ) : $payload as $one ) {
+					$payloads[] = $one;
 				}
 			}
 		}

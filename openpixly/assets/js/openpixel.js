@@ -3,9 +3,10 @@
  *
  * PHP emits provider payloads as { provider: "openai", args: [...], event_id }.
  * Each provider registers a handler; the built-in handlers simply forward
- * args to the official SDK queue (window.oaiq, window.fbq). Payloads can arrive:
+ * args to the official SDK queue (window.oaiq, window.fbq, window.gtag). Payloads can arrive:
  *   - inline in the footer (window.openPixelEvents),
- *   - inside WooCommerce AJAX fragments (#openpixel-pending[data-openpixel-events]).
+ *   - inside WooCommerce AJAX fragments (#openpixel-pending[data-openpixel-events]),
+ *   - inside Contact Form 7 / WPForms AJAX responses (openpixel key).
  */
 (function (window, document) {
 	'use strict';
@@ -104,6 +105,13 @@
 		window.fbq.apply(null, payload.args);
 	});
 
+	openPixel.register('google', function (payload) {
+		if (typeof window.gtag !== 'function' || !payload.args) {
+			return;
+		}
+		window.gtag.apply(null, payload.args);
+	});
+
 	var consentSetters = {
 		openai: function (granted) {
 			if (typeof window.oaiq === 'function') {
@@ -113,6 +121,17 @@
 		meta: function (granted) {
 			if (typeof window.fbq === 'function') {
 				window.fbq('consent', granted ? 'grant' : 'revoke');
+			}
+		},
+		google: function (granted) {
+			if (typeof window.gtag === 'function') {
+				var state = granted ? 'granted' : 'denied';
+				window.gtag('consent', 'update', {
+					ad_storage: state,
+					ad_user_data: state,
+					ad_personalization: state,
+					analytics_storage: state
+				});
 			}
 		}
 	};
@@ -207,6 +226,38 @@
 			'added_to_cart wc_fragments_refreshed wc_fragments_loaded',
 			readPendingFragment
 		);
+	}
+
+	/* ------------------------------------------------------------------
+	 * Lead forms: payloads returned inside the AJAX response
+	 * ---------------------------------------------------------------- */
+
+	function pushFromResponse(obj) {
+		if (!obj || typeof obj !== 'object') {
+			return false;
+		}
+		var list = Array.isArray(obj.openpixel) ? obj.openpixel : (obj.data && Array.isArray(obj.data.openpixel) ? obj.data.openpixel : null);
+		if (!list) {
+			return false;
+		}
+		list.forEach(openPixel.push);
+		return true;
+	}
+
+	// Contact Form 7: wpcf7submit fires for every submission; only responses with payloads carry them.
+	document.addEventListener('wpcf7submit', function (e) {
+		pushFromResponse(e && e.detail && e.detail.apiResponse);
+	});
+
+	// WPForms: jQuery event with the JSON response somewhere in its arguments.
+	if (window.jQuery) {
+		window.jQuery(document).on('wpformsAjaxSubmitSuccess', function () {
+			for (var i = 0; i < arguments.length; i++) {
+				if (pushFromResponse(arguments[i])) {
+					return;
+				}
+			}
+		});
 	}
 
 	if (document.readyState === 'loading') {

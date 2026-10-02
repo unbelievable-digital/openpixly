@@ -153,7 +153,8 @@ abstract class OpenPixel_Provider {
 	 * Turn a normalized event into a browser payload, or null to skip it.
 	 *
 	 * @param array $event Normalized bus event.
-	 * @return array|null array( 'provider' => id, 'args' => array(...), 'event_id' => string )
+	 * @return array|null array( 'provider' => id, 'args' => array(...), 'event_id' => string ),
+	 *                    or a list of such arrays when one event needs several SDK calls.
 	 */
 	abstract public function to_browser_payload( array $event );
 

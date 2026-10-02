@@ -51,6 +51,7 @@ WordPress plugin: conversion pixel manager + product feed for ChatGPT Ads. Lives
 - Released: 1.2.0 live at https://wordpress.org/plugins/openpixly/ (SVN r3689603 code, r3689605 assets, 2026-09-10; git tag `v1.2.0`).
 - Released: 1.3.0 (Meta pixel, Conversions API, catalog feed) SVN r3704553, 2026-09-20; git tag `v1.3.0`.
 - Released: 1.3.1 (consent race fix, GitHub #1) SVN r3714428, 2026-09-26; git tag `v1.3.1`.
+- Released: 1.4.0 (Events debugger tab, server-side registration, channel=both) SVN r3724216, 2026-10-02; git tag `v1.4.0`.
 - Consent: `openpixel.js` depends on `wp-consent-api` (enqueue priority 20) and core wires `openpixel_consent_granted` to `wp_has_consent('marketing')` only when `wp_get_consent_type()` is non-empty (GitHub #1). To test it, install WP Consent API in the demo store plus a stub plugin returning `optin` from the `wp_get_consent_type` filter (the API returns true for everything without a CMP).
 - Next releases: bump version (header, `OPENPIXEL_VERSION`, `Stable tag`, changelog), then `npx pressship release ./openpixly --slug openpixly --username zgrkaralar -y`. Do NOT pass `--version`: the CLI treats it as its own version flag and just prints `0.1.0`; the version comes from the plugin header.
 - SVN password is saved in `~/.config/pressship/svn-credentials.json` (mode 600, never commit). Working copy is `.pressship-svn/openpixly` (gitignored).

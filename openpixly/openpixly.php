@@ -3,7 +3,7 @@
  * Plugin Name:       Openpixly – Conversion Tracking & Product Feed for OpenAI Ads
  * Plugin URI:        https://github.com/unbelievable-digital/openpixly
  * Description:       Conversion pixel manager for WordPress and WooCommerce. Ships the OpenAI (ChatGPT Ads) Measurement Pixel, the Meta Pixel and the Google tag (Ads + GA4): page views, product views, add to cart, checkout, purchases, registrations and lead forms, with Conversions APIs and product feeds.
- * Version:           1.5.0
+ * Version:           1.5.1
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Unbelievable Digital
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OPENPIXEL_VERSION', '1.5.0' );
+define( 'OPENPIXEL_VERSION', '1.5.1' );
 define( 'OPENPIXEL_PLUGIN_FILE', __FILE__ );
 define( 'OPENPIXEL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'OPENPIXEL_PLUGIN_URL', plugin_dir_url( __FILE__ ) );

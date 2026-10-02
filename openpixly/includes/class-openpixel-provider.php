@@ -159,6 +159,14 @@ abstract class OpenPixel_Provider {
 	abstract public function to_browser_payload( array $event );
 
 	/**
+	 * Why to_browser_payload() returned null for this event, for the Events
+	 * tab. Override when the reason is not simply "unsupported".
+	 */
+	public function skip_reason( array $event ) {
+		return __( 'not sent (event not supported by this provider)', 'openpixly' );
+	}
+
+	/**
 	 * Handle a server-channel event (Conversions API). No-op by default.
 	 *
 	 * @param array $event Normalized bus event with channel = server.

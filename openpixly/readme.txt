@@ -4,7 +4,7 @@ Tags: openai, chatgpt ads, meta pixel, google ads, conversion tracking
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -142,6 +142,12 @@ Service provider: Meta Platforms, Inc. / Meta Platforms Ireland Ltd. Meta Busine
 
 **Consent.** Measurement is opt-in for the site owner (disabled until configured) and administrators are excluded by default. To make it opt-in for visitors, choose "Require consent first" on each provider: the pixel then starts with consent revoked (`oaiq("consent", false)` / `fbq("consent", "revoke")`) and only measures after your cookie banner calls `window.openPixel.grantConsent()` or the WP Consent API reports the "marketing" category as allowed. Server-side Conversions API events are sent for paid orders whenever that option is enabled; leave it off if your legal basis requires browser consent for them too. Disclose the pixels you use in your site's privacy policy.
 
+== Screenshots ==
+
+1. Pixels tab: OpenAI, Meta and Google providers with their own IDs, consent mode, hashed customer data and Conversions API settings.
+2. Events tab: the debugger shows every tracked event, the exact payload each provider received and the Conversions API result.
+3. Product feed tab: OpenAI product feed and Meta catalog feed with private URLs, schedule and status.
+
 == Frequently Asked Questions ==
 
 = Where do I find my Pixel ID and Conversions API key? =
@@ -158,6 +164,10 @@ and `img-src https://bzr.openai.com`. For the Google tag add `script-src https:/
 Yes. The plugin only uses the WooCommerce CRUD order API and declares HPOS compatibility.
 
 == Changelog ==
+
+= 1.5.1 =
+* Events tab: the table no longer overflows on narrow screens; providers now explain why an event was not sent (e.g. page_view is sent by the Google tag's config).
+* Screenshots on WordPress.org.
 
 = 1.5.0 =
 * New: Google provider (Google tag): GA4 ecommerce events, Google Ads conversions per event via conversion labels, enhanced conversions with server-side hashing, Consent Mode v2.

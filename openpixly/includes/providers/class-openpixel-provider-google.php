@@ -203,6 +203,13 @@ class OpenPixel_Provider_Google extends OpenPixel_Provider {
 		echo "</script>\n<!-- / Google tag -->\n";
 	}
 
+	public function skip_reason( array $event ) {
+		if ( 'page_view' === $event['name'] ) {
+			return __( 'page_view is sent by gtag("config") itself', 'openpixly' );
+		}
+		return parent::skip_reason( $event );
+	}
+
 	public function to_browser_payload( array $event ) {
 		if ( 'page_view' === $event['name'] ) {
 			return null; // gtag("config") sends page_view itself.

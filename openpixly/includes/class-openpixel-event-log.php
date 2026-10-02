@@ -83,7 +83,7 @@ class OpenPixel_Event_Log {
 			}
 			$payload = $provider->to_browser_payload( $event );
 			if ( ! $payload ) {
-				$payloads[ $id ] = 'skipped';
+				$payloads[ $id ] = $provider->skip_reason( $event );
 			} elseif ( isset( $payload['provider'] ) ) {
 				$payloads[ $id ] = $payload['args'];
 			} else {

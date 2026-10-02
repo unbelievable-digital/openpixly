@@ -6,11 +6,16 @@
 	font-family: Consolas, Monaco, monospace;
 }
 
-.openpixel-events td { vertical-align: top; }
+.openpixel-events { table-layout: fixed; }
+.openpixel-events td { vertical-align: top; overflow-wrap: anywhere; }
 .openpixel-events code { font-size: 12px; }
 .openpixel-event-detail { margin: 0 0 4px; }
 .openpixel-event-detail summary { cursor: pointer; }
-.openpixel-event-detail pre { max-width: 520px; max-height: 260px; overflow: auto; background: #f6f7f7; padding: 8px; font-size: 11px; margin: 4px 0; }
+.openpixel-event-detail pre { max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all; background: #f6f7f7; padding: 8px; font-size: 11px; margin: 4px 0; }
 .openpixel-event-detail .openpixel-error { color: #b32d2e; margin: 4px 0; }
-.openpixel-events th:last-child, .openpixel-events td:last-child { width: 30%; }
-.openpixel-events th:nth-child(3) { width: 18%; }
+.openpixel-events th:last-child, .openpixel-events td:last-child { width: 33%; }
+.openpixel-events th:nth-child(1) { width: 7%; }
+.openpixel-events th:nth-child(2) { width: 13%; }
+.openpixel-events th:nth-child(3) { width: 17%; }
+.openpixel-events th:nth-child(4), .openpixel-events th:nth-child(6) { width: 8%; }
+.openpixel-events td:nth-child(2) code { white-space: nowrap; }
